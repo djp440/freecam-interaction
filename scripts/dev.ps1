@@ -25,7 +25,10 @@ try {
         $jar = Join-Path $ProjectRoot 'build/libs/godview_build-0.1.0.jar'
         $archive = [System.IO.Compression.ZipFile]::OpenRead($jar)
         try {
-            foreach ($entry in @('local/godviewbuild/GodviewBuild.class', 'local/godviewbuild/ModLog.class', 'META-INF/neoforge.mods.toml')) {
+            foreach ($entry in @('local/godviewbuild/GodviewBuild.class', 'local/godviewbuild/ModLog.class',
+                    'local/godviewbuild/client/GodviewClient.class', 'local/godviewbuild/client/GodviewClient$Registration.class',
+                    'local/godviewbuild/client/GodviewScreen.class', 'assets/godview_build/lang/zh_cn.json',
+                    'assets/godview_build/lang/en_us.json', 'META-INF/neoforge.mods.toml')) {
                 if (!$archive.GetEntry($entry)) { throw "JAR 缺少 $entry" }
             }
             $reader = [System.IO.StreamReader]::new($archive.GetEntry('META-INF/neoforge.mods.toml').Open(), [System.Text.Encoding]::UTF8)
@@ -33,7 +36,7 @@ try {
             if ($metadata.Contains('${') -or !$metadata.Contains('modId="godview_build"') -or !$metadata.Contains('versionRange="[1.21.1]"') -or !$metadata.Contains('上帝视角建造')) {
                 throw 'JAR 元数据存在未展开占位符、版本错误或中文编码错误。'
             }
-            Write-Host "冒烟通过：$jar；入口类、日志模块、中文元数据与精确版本范围正常。"
+            Write-Host "冒烟通过：$jar；模式类、语言资源、日志模块、中文元数据与精确版本范围正常。"
         } finally { $archive.Dispose() }
     }
 } catch {

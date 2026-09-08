@@ -6,7 +6,7 @@ license="All Rights Reserved"
 modId="${mod_id}"
 version="${mod_version}"
 displayName="${mod_name}"
-description='''上帝视角建造：开发脚手架，尚未实现建造功能。'''
+description='''上帝视角建造：可配置快捷键开启高位第三人称观察界面，尚未实现建造功能。'''
 
 [[dependencies.${mod_id}]]
 modId="neoforge"
