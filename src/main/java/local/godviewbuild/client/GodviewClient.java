@@ -88,6 +88,8 @@ public final class GodviewClient {
     public static void onMovement(MovementInputUpdateEvent event) {
         if (session != null && session.isCurrentSession()) {
             clearMovement(event.getInput());
+            event.getInput().shiftKeyDown = session.canControl()
+                    && session.down(Minecraft.getInstance().options.keyShift);
             event.getEntity().setSprinting(false);
         }
     }
@@ -137,6 +139,14 @@ public final class GodviewClient {
                 exit("close_button");
             } else if (event.getButton() == GLFW.GLFW_MOUSE_BUTTON_MIDDLE) {
                 session.drag(event.getAction() == GLFW.GLFW_PRESS);
+                GodviewSelection.stopInput();
+            } else if (canBuild()) {
+                var key = InputConstants.Type.MOUSE.getOrCreate(event.getButton());
+                boolean pressed = event.getAction() == GLFW.GLFW_PRESS;
+                KeyMapping.set(key, pressed);
+                if (pressed) {
+                    KeyMapping.click(key);
+                }
             }
         }
     }
@@ -163,10 +173,22 @@ public final class GodviewClient {
 
     @SubscribeEvent
     public static void onInteraction(InputEvent.InteractionKeyMappingTriggered event) {
-        if (session != null) {
+        if (session != null && (!canBuild() || GodviewSelection.target() == null || event.isPickBlock())) {
             event.setCanceled(true);
             event.setSwingHand(false);
+        } else if (session != null && event.isUseItem()) {
+            local.godviewbuild.ModLog.LOGGER.debug("Godview use requested; position={}; face={}; hand={}",
+                    GodviewSelection.target().getBlockPos(), GodviewSelection.target().getDirection(), event.getHand());
         }
+    }
+
+    public static boolean active() {
+        return session != null;
+    }
+
+    public static boolean canBuild() {
+        return session != null && session.canControl() && !session.dragging && !session.overClose()
+                && local.godviewbuild.GodviewInteraction.active(Minecraft.getInstance().player);
     }
 
     private static void exit(String reason) {

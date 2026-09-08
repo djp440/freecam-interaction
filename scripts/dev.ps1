@@ -18,7 +18,9 @@ try {
         }
     }
     Use-ProjectJava
-    & ./gradlew.bat $tasks[$Action] --console=plain
+    $gradleTasks = @($tasks[$Action])
+    if ($Action -eq 'smoke') { $gradleTasks += 'interactionCheck' }
+    & ./gradlew.bat @gradleTasks --console=plain
     if ($LASTEXITCODE -ne 0) { throw "Gradle $Action 失败，退出码 $LASTEXITCODE；检查日志后可重试。" }
     if ($Action -eq 'smoke') {
         & java -ea --class-path 'build/classes/java/main' 'scripts/CameraMotionCheck.java'
@@ -30,7 +32,9 @@ try {
             foreach ($entry in @('local/godviewbuild/GodviewBuild.class', 'local/godviewbuild/ModLog.class',
                     'local/godviewbuild/client/GodviewClient.class', 'local/godviewbuild/client/GodviewClient$Registration.class',
                     'local/godviewbuild/client/GodviewSession.class', 'local/godviewbuild/client/GodviewMotion.class',
-                    'META-INF/accesstransformer.cfg', 'assets/godview_build/lang/zh_cn.json',
+                    'local/godviewbuild/GodviewInteraction.class', 'local/godviewbuild/client/GodviewSelection.class',
+                    'local/godviewbuild/mixin/PlayerMixin.class', 'local/godviewbuild/mixin/MinecraftMixin.class',
+                    'godview_build.mixins.json', 'META-INF/accesstransformer.cfg', 'assets/godview_build/lang/zh_cn.json',
                     'assets/godview_build/lang/en_us.json', 'META-INF/neoforge.mods.toml')) {
                 if (!$archive.GetEntry($entry)) { throw "JAR 缺少 $entry" }
             }

@@ -6,7 +6,10 @@ license="All Rights Reserved"
 modId="${mod_id}"
 version="${mod_version}"
 displayName="${mod_name}"
-description='''上帝视角建造：可配置快捷键开启高位第三人称观察界面，尚未实现建造功能。'''
+description='''上帝视角建造：高位第三人称观察，以鼠标选取玩家周围 16 格立方体范围内的方块进行挖掘、放置和交互。'''
+
+[[mixins]]
+config="godview_build.mixins.json"
 
 [[dependencies.${mod_id}]]
 modId="neoforge"

@@ -3,5 +3,6 @@
   "key.godview_build.enter": "Toggle Godview",
   "screen.godview_build.title": "GODVIEW",
   "screen.godview_build.close": "Exit Godview",
-  "screen.godview_build.help": "%s/%s/%s/%s Pan · Middle-drag Rotate · Number keys/Wheel Select item · %s Inventory · Esc Game menu · %s or X button Exit"
+  "screen.godview_build.help": "%s/%s/%s/%s Pan · Middle-drag Rotate · Left Mine/Right Use · Shift Secondary use · Number keys/Wheel Select · %s Inventory · Esc Menu · %s or X Exit",
+  "screen.godview_build.unsupported": "This server does not support Godview interaction. Observation only; install the same Godview Build version on the server."
 }

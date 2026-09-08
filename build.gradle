@@ -41,3 +41,11 @@ tasks.named('processResources', ProcessResources) {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
+
+tasks.register('interactionCheck', JavaExec) {
+    dependsOn tasks.named('classes')
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    classpath = sourceSets.main.runtimeClasspath + sourceSets.main.compileClasspath
+    mainClass = 'scripts/InteractionCheck.java'
+    jvmArgs '-ea', '-Dfile.encoding=UTF-8'
+}

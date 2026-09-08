@@ -2,6 +2,8 @@ package local.godviewbuild.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import local.godviewbuild.ModLog;
+import local.godviewbuild.GodviewInteraction;
+import net.neoforged.neoforge.network.PacketDistributor;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -21,7 +23,8 @@ final class GodviewSession {
     Vec3 anchor = originPlayer.getEyePosition();
     float yaw = originPlayer.getYRot();
     float pitch = GodviewClient.PITCH;
-    private boolean dragging;
+    boolean dragging;
+    private final boolean supported = client.getConnection().hasChannel(GodviewInteraction.Mode.TYPE);
     private double mouseX;
     private double mouseY;
     private long lastFrame = System.nanoTime();
@@ -37,6 +40,13 @@ final class GodviewSession {
         }
         setCamera(CameraType.THIRD_PERSON_BACK);
         client.mouseHandler.releaseMouse();
+        if (supported) {
+            GodviewInteraction.setActive(originPlayer, true);
+            PacketDistributor.sendToServer(new GodviewInteraction.Mode(true));
+        } else {
+            originPlayer.displayClientMessage(Component.translatable("screen.godview_build.unsupported"), false);
+        }
+        GodviewSelection.reset();
         ModLog.LOGGER.info("Godview entered; dimension={}; anchor={}; previousCamera={}",
                 originLevel.dimension().location(), anchor, previousCamera);
     }
@@ -60,6 +70,7 @@ final class GodviewSession {
         }
         if (!canControl()) {
             drag(false);
+            GodviewSelection.stopInput();
             return;
         }
         if (client.mouseHandler.isMouseGrabbed()) {
@@ -89,7 +100,7 @@ final class GodviewSession {
         }
     }
 
-    private boolean down(KeyMapping mapping) {
+    boolean down(KeyMapping mapping) {
         InputConstants.Key key = mapping.getKey();
         if (key.getType() == InputConstants.Type.MOUSE) {
             return GLFW.glfwGetMouseButton(client.getWindow().getWindow(), key.getValue()) == GLFW.GLFW_PRESS;
@@ -140,6 +151,13 @@ final class GodviewSession {
     }
 
     void restore(String reason) {
+        GodviewSelection.stopInput();
+        GodviewSelection.reset();
+        GodviewInteraction.setActive(originPlayer, false);
+        if (supported && client.player == originPlayer && client.getConnection() != null
+                && client.getConnection().hasChannel(GodviewInteraction.Mode.TYPE)) {
+            PacketDistributor.sendToServer(new GodviewInteraction.Mode(false));
+        }
         drag(false);
         KeyMapping.releaseAll();
         KeyMapping.resetToggleKeys();

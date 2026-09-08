@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "local.godviewbuild.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": ["PlayerMixin", "BlockItemMixin", "ServerGameModeMixin"],
+  "client": ["MinecraftMixin", "GameRendererMixin"],
+  "injectors": { "defaultRequire": 1 }
+}
