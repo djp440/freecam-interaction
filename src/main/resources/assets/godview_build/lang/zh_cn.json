@@ -1,6 +1,7 @@
 {
   "key.categories.godview_build": "上帝视角建造",
-  "key.godview_build.enter": "进入上帝视角",
+  "key.godview_build.enter": "切换上帝视角",
   "screen.godview_build.title": "上帝视角",
-  "screen.godview_build.close": "退出上帝视角（Esc）"
+  "screen.godview_build.close": "退出上帝视角",
+  "screen.godview_build.help": "%s/%s/%s/%s 平移 · 中键拖拽旋转 · 数字键/滚轮选择物品 · %s 背包 · Esc 游戏菜单 · %s 或 X 按钮退出"
 }

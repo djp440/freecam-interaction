@@ -21,13 +21,16 @@ try {
     & ./gradlew.bat $tasks[$Action] --console=plain
     if ($LASTEXITCODE -ne 0) { throw "Gradle $Action 失败，退出码 $LASTEXITCODE；检查日志后可重试。" }
     if ($Action -eq 'smoke') {
+        & java -ea --class-path 'build/classes/java/main' 'scripts/CameraMotionCheck.java'
+        if ($LASTEXITCODE -ne 0) { throw '相机运动逻辑自检失败。' }
         Add-Type -AssemblyName System.IO.Compression.FileSystem
         $jar = Join-Path $ProjectRoot 'build/libs/godview_build-0.1.0.jar'
         $archive = [System.IO.Compression.ZipFile]::OpenRead($jar)
         try {
             foreach ($entry in @('local/godviewbuild/GodviewBuild.class', 'local/godviewbuild/ModLog.class',
                     'local/godviewbuild/client/GodviewClient.class', 'local/godviewbuild/client/GodviewClient$Registration.class',
-                    'local/godviewbuild/client/GodviewScreen.class', 'assets/godview_build/lang/zh_cn.json',
+                    'local/godviewbuild/client/GodviewSession.class', 'local/godviewbuild/client/GodviewMotion.class',
+                    'META-INF/accesstransformer.cfg', 'assets/godview_build/lang/zh_cn.json',
                     'assets/godview_build/lang/en_us.json', 'META-INF/neoforge.mods.toml')) {
                 if (!$archive.GetEntry($entry)) { throw "JAR 缺少 $entry" }
             }

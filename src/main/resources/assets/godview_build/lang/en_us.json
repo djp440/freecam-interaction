@@ -1,6 +1,7 @@
 {
   "key.categories.godview_build": "Godview Build",
-  "key.godview_build.enter": "Enter Godview",
+  "key.godview_build.enter": "Toggle Godview",
   "screen.godview_build.title": "GODVIEW",
-  "screen.godview_build.close": "Exit Godview (Esc)"
+  "screen.godview_build.close": "Exit Godview",
+  "screen.godview_build.help": "%s/%s/%s/%s Pan · Middle-drag Rotate · Number keys/Wheel Select item · %s Inventory · Esc Game menu · %s or X button Exit"
 }
