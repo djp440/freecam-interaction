@@ -1,4 +1,5 @@
 import local.freecaminteraction.client.FreecamMotion;
+import local.freecaminteraction.FreecamRange;
 
 class CameraMotionCheck {
     public static void main(String[] args) {
@@ -15,6 +16,11 @@ class CameraMotionCheck {
         assert FreecamMotion.pan(0, 1, 0, 0.025).z() * 2 == forward.z();
         assert FreecamMotion.pan(Double.NaN, 1, 0, 0.05).equals(new FreecamMotion.Offset(0, 0));
         assert FreecamMotion.pan(0, 1, 0, -1).z() == 0;
+        assert Math.abs(FreecamRange.cameraReach() - 12.0) < 1e-9;
+        assert Math.abs(FreecamRange.clampCamera(100.0, 115.0) - 112.0) < 1e-9;
+        assert Math.abs(FreecamRange.clampCamera(100.0, 80.0) - 88.0) < 1e-9;
+        assert Math.abs(FreecamRange.clampCamera(100.0, 105.0) - 105.0) < 1e-9;
+        assert FreecamRange.clampCamera(100.0, Double.NaN) == 100.0;
         System.out.println("Camera motion checks passed: direction, diagonal, frame rate, idle and limits.");
     }
 }

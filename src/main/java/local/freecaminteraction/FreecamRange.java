@@ -21,4 +21,18 @@ public final class FreecamRange {
         }
         return (int) Math.ceil(playerCoordinate - 8.5);
     }
+
+    public static double cameraReach() {
+        return (SIZE / 2.0) * 1.5;
+    }
+
+    public static double clampCamera(double playerCoordinate, double cameraCoordinate) {
+        if (!Double.isFinite(playerCoordinate) || !Double.isFinite(cameraCoordinate)) {
+            return playerCoordinate;
+        }
+        double reach = cameraReach();
+        double min = Math.max(-29_999_984.0, playerCoordinate - reach);
+        double max = Math.min(29_999_984.0, playerCoordinate + reach);
+        return Math.max(min, Math.min(max, cameraCoordinate));
+    }
 }

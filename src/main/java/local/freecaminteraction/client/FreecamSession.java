@@ -3,6 +3,7 @@ package local.freecaminteraction.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import local.freecaminteraction.ModLog;
 import local.freecaminteraction.FreecamInteraction;
+import local.freecaminteraction.FreecamRange;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.KeyMapping;
@@ -93,10 +94,9 @@ final class FreecamSession {
         double right = (down(client.options.keyRight) ? 1 : 0) - (down(client.options.keyLeft) ? 1 : 0);
         if (forward != 0 || right != 0) {
             var offset = FreecamMotion.pan(yaw, forward, right, elapsed);
-            double nextX = anchor.x + offset.x();
-            double nextZ = anchor.z + offset.z();
-            anchor = new Vec3(Mth.clamp(nextX, -29_999_984.0, 29_999_984.0), anchor.y,
-                    Mth.clamp(nextZ, -29_999_984.0, 29_999_984.0));
+            double nextX = FreecamRange.clampCamera(originPlayer.getX(), anchor.x + offset.x());
+            double nextZ = FreecamRange.clampCamera(originPlayer.getZ(), anchor.z + offset.z());
+            anchor = new Vec3(nextX, anchor.y, nextZ);
         }
     }
 

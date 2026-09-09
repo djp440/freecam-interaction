@@ -10,6 +10,7 @@ import cpw.mods.fml.relauncher.ReflectionHelper;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
 import local.freecaminteraction.FreecamInteraction;
+import local.freecaminteraction.FreecamRange;
 import local.freecaminteraction.ModLog;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityOtherPlayerMP;
@@ -238,8 +239,9 @@ public final class FreecamClient {
             double forward = (down(MC.gameSettings.keyBindForward) ? 1 : 0) - (down(MC.gameSettings.keyBindBack) ? 1 : 0);
             double right = (down(MC.gameSettings.keyBindRight) ? 1 : 0) - (down(MC.gameSettings.keyBindLeft) ? 1 : 0);
             double[] offset = FreecamMotion.pan(camera.rotationYaw, forward, right, elapsed);
-            camera.setPosition(Math.max(-29999984, Math.min(29999984, camera.posX + offset[0])), camera.posY,
-                    Math.max(-29999984, Math.min(29999984, camera.posZ + offset[1])));
+            double nextX = FreecamRange.clampCamera(player.posX, camera.posX + offset[0]);
+            double nextZ = FreecamRange.clampCamera(player.posZ, camera.posZ + offset[1]);
+            camera.setPosition(nextX, camera.posY, nextZ);
             syncCamera();
         }
         if (dragging != rotate) ModLog.info("Camera dragging=" + rotate + "; yaw=" + camera.rotationYaw + "; pitch=" + camera.rotationPitch);

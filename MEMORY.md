@@ -48,4 +48,8 @@
   - 日志闭环：独立日志文件在 `logs/freecam_interaction/2026-09-09 21-05-09.log` 成功生成并完整记录进入/退出生命周期。
   - 游戏正常保存世界并返回主菜单后退出。全部测试通过。
 
-- 2026-09-09 21:18：用户明确指令“提交”，据此将全量重命名（“自由视角交互”、`freecam_interaction`、`local.freecaminteraction`、`Freecam*`）、Forge 1.7.10 移植实验实现、NeoForge 1.21.1 迁移参考、自动化自检脚本与验收文档提交至分支 `codex/forge-1.7.10`。冒烟及真实游戏内验收均已留存凭证通过。
+- 2026-09-09 21:15：为导入 GTNH 整合包测试构建 Forge 1.7.10 / lwjgl3ify 支持的 JAR。在 `FreecamTransformer` 中实现 lwjgl3ify 环境零配置自适应检测（自动反射探测 `org.lwjgl.Version` 与 `me.eigenraven.lwjgl3ify.core.Lwjgl3ifyCoremod`），用户将 Mod 直接丢入 GTNH 整合包的 `mods` 文件夹时无需额外配置 `-Dfreecam.lwjgl3ify=true` 即可自动跳过原生 OpenAL 补丁，同时保留容器距离（TileEntity/Container）改写和全套自由视角交互能力。更新 `mcmod.info` 描述，执行 `scripts/forge1710.ps1 smoke` 构建与冒烟通过，生成产物 `build/libs/freecam_interaction-0.1.0-forge1710-experiment.jar`。
+
+- 2026-09-09 21:40：完成自由视角模式下相机移动范围限制在交互范围 +50% 的双版本改造。经两阶段意图补齐与非硬编码确认，在 `src/forge1710` 与 `src/main` 的 `FreecamRange` 中实现 `cameraReach()` 动态派生方法（`(SIZE / 2.0) * 1.5`）和 `clampCamera(player, camera)` 独立轴向截断保护（兼顾世界边界 `±29999984` 与 NaN 防护）。1.7.10 的 `FreecamClient` 与 1.21.1 的 `FreecamSession` 平移时均直接接入 `FreecamRange.clampCamera`，杜绝散落魔法数字，为后续交互范围动态化预留联动基础。同步更新 `scripts/LegacyCheck.java` 和 `scripts/CameraMotionCheck.java` 自检断言。执行 `scripts/forge1710.ps1 check` 与 `smoke` 冒烟全部通过。
+
+- 2026-09-09 21:43：启动 lwjgl3ify 实例供用户进行真实桌面交互验收，用户人工实机体验自由视角平移、边界阻挡与滑动效果，确认功能符合预期并通过测试。据用户明确指令将相机可移动范围限制在交互范围 +50% 及 lwjgl3ify 自适应补丁提交至分支 `codex/forge-1.7.10`。

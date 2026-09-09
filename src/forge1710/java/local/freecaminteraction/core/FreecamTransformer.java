@@ -26,7 +26,7 @@ public final class FreecamTransformer implements IClassTransformer {
         boolean vanillaContainer = DISTANCE_CONTAINERS.contains(transformedName);
         if (vanillaContainer || hasContainerMethod(bytes)) return patchContainerDistance(transformedName, bytes, vanillaContainer);
         if (!transformedName.equals("net.minecraft.client.audio.SoundManager")) return bytes;
-        if (Boolean.getBoolean("freecam.lwjgl3ify") || Boolean.getBoolean("godview.lwjgl3ify")) return bytes;
+        if (isLwjgl3ify()) return bytes;
         ClassNode node = new ClassNode();
         new ClassReader(bytes).accept(node, 0);
         int changed = 0;
@@ -47,6 +47,25 @@ public final class FreecamTransformer implements IClassTransformer {
         ClassWriter writer = new ClassWriter(0);
         node.accept(writer);
         return writer.toByteArray();
+    }
+
+    private static boolean isLwjgl3ify() {
+        if (Boolean.getBoolean("freecam.lwjgl3ify") || Boolean.getBoolean("godview.lwjgl3ify")) return true;
+        ClassLoader cl = FreecamTransformer.class.getClassLoader();
+        try {
+            Class<?> v = Class.forName("org.lwjgl.Version", false, cl);
+            String ver = (String) v.getMethod("getVersion").invoke(null);
+            if (ver != null && ver.startsWith("3")) return true;
+        } catch (Throwable ignored) {}
+        try {
+            Class.forName("me.eigenraven.lwjgl3ify.core.Lwjgl3ifyCoremod", false, cl);
+            return true;
+        } catch (Throwable ignored) {}
+        try {
+            String prop = System.getProperty("org.lwjgl.version");
+            if (prop != null && prop.startsWith("3")) return true;
+        } catch (Throwable ignored) {}
+        return false;
     }
 
     private static boolean hasContainerMethod(byte[] bytes) {

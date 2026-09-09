@@ -18,6 +18,11 @@ public class LegacyCheck {
         assert !FreecamRange.contains(0.5, 0.5, 0.5, 8, 0, 0);
         assert !FreecamRange.contains(Double.NaN, 0, 0, 0, 0, 0);
         assert FreecamRange.minimumBlock(-0.5) == -9;
+        assert Math.abs(FreecamRange.cameraReach() - 12.0) < 1e-9;
+        assert Math.abs(FreecamRange.clampCamera(100.0, 115.0) - 112.0) < 1e-9;
+        assert Math.abs(FreecamRange.clampCamera(100.0, 80.0) - 88.0) < 1e-9;
+        assert Math.abs(FreecamRange.clampCamera(100.0, 105.0) - 105.0) < 1e-9;
+        assert FreecamRange.clampCamera(100.0, Double.NaN) == 100.0;
         ModLog.initialize();
         ModLog.initialize();
         ModLog.info("Legacy Java 8 smoke passed: motion and idempotent log initialization.");
