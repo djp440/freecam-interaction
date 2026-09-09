@@ -16,6 +16,11 @@ class CameraMotionCheck {
         assert FreecamMotion.pan(0, 1, 0, 0.025).z() * 2 == forward.z();
         assert FreecamMotion.pan(Double.NaN, 1, 0, 0.05).equals(new FreecamMotion.Offset(0, 0));
         assert FreecamMotion.pan(0, 1, 0, -1).z() == 0;
+        assert Math.abs(FreecamMotion.vertical(1, 0.05) - 0.5) < 1e-9;
+        assert Math.abs(FreecamMotion.vertical(-1, 0.05) + 0.5) < 1e-9;
+        assert FreecamMotion.vertical(0, 0.05) == 0;
+        assert FreecamMotion.vertical(Double.NaN, 0.05) == 0;
+        assert FreecamMotion.vertical(1, 99) == 0.5;
         assert Math.abs(FreecamRange.cameraReach() - 12.0) < 1e-9;
         assert Math.abs(FreecamRange.clampCamera(100.0, 115.0) - 112.0) < 1e-9;
         assert Math.abs(FreecamRange.clampCamera(100.0, 80.0) - 88.0) < 1e-9;

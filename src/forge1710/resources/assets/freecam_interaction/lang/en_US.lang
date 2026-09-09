@@ -1,5 +1,5 @@
 key.freecam_interaction.enter=Toggle Freecam
 key.categories.freecam_interaction=Freecam Interaction
 screen.freecam_interaction.title=Freecam Interaction
-screen.freecam_interaction.help=WASD pan | Middle rotate | Left mine | Right use/place | %s exit
+screen.freecam_interaction.help=WASD pan | Space/Ctrl elevate | Middle rotate | Left mine | Right use/place | %s exit
 screen.freecam_interaction.unsupported=Server has not enabled interaction; observation only | %s exit

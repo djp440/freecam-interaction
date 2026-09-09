@@ -92,12 +92,20 @@ final class FreecamSession {
         mouseY = currentY;
         double forward = (down(client.options.keyUp) ? 1 : 0) - (down(client.options.keyDown) ? 1 : 0);
         double right = (down(client.options.keyRight) ? 1 : 0) - (down(client.options.keyLeft) ? 1 : 0);
-        if (forward != 0 || right != 0) {
+        double up = (down(client.options.keyJump) || isKeyDown(GLFW.GLFW_KEY_SPACE) ? 1 : 0)
+                - (down(client.options.keySprint) || isKeyDown(GLFW.GLFW_KEY_LEFT_CONTROL) || isKeyDown(GLFW.GLFW_KEY_RIGHT_CONTROL) ? 1 : 0);
+        if (forward != 0 || right != 0 || up != 0) {
             var offset = FreecamMotion.pan(yaw, forward, right, elapsed);
+            double yOffset = FreecamMotion.vertical(up, elapsed);
             double nextX = FreecamRange.clampCamera(originPlayer.getX(), anchor.x + offset.x());
+            double nextY = FreecamRange.clampCamera(originPlayer.getY(), anchor.y + yOffset);
             double nextZ = FreecamRange.clampCamera(originPlayer.getZ(), anchor.z + offset.z());
-            anchor = new Vec3(nextX, anchor.y, nextZ);
+            anchor = new Vec3(nextX, nextY, nextZ);
         }
+    }
+
+    boolean isKeyDown(int key) {
+        return key >= 0 && InputConstants.isKeyDown(client.getWindow().getWindow(), key);
     }
 
     boolean down(KeyMapping mapping) {

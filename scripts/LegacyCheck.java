@@ -14,6 +14,11 @@ public class LegacyCheck {
         assert Arrays.equals(forward, FreecamMotion.pan(0, 1, 0, 99));
         assert FreecamMotion.pan(0, 1, 0, -1)[1] == 0;
         assert FreecamMotion.pan(Double.NaN, 1, 0, 0.05)[1] == 0;
+        assert Math.abs(FreecamMotion.vertical(1, 0.05) - 0.5) < 1e-9;
+        assert Math.abs(FreecamMotion.vertical(-1, 0.05) + 0.5) < 1e-9;
+        assert FreecamMotion.vertical(0, 0.05) == 0;
+        assert FreecamMotion.vertical(Double.NaN, 0.05) == 0;
+        assert FreecamMotion.vertical(1, 99) == 0.5;
         assert FreecamRange.contains(0.5, 0.5, 0.5, -8, -8, -8);
         assert !FreecamRange.contains(0.5, 0.5, 0.5, 8, 0, 0);
         assert !FreecamRange.contains(Double.NaN, 0, 0, 0, 0, 0);

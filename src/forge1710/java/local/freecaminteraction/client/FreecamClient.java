@@ -12,6 +12,8 @@ import cpw.mods.fml.relauncher.SideOnly;
 import local.freecaminteraction.FreecamInteraction;
 import local.freecaminteraction.FreecamRange;
 import local.freecaminteraction.ModLog;
+import net.minecraft.block.Block;
+import net.minecraft.block.material.Material;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityOtherPlayerMP;
 import net.minecraft.client.entity.EntityClientPlayerMP;
@@ -22,6 +24,7 @@ import net.minecraft.client.resources.I18n;
 import net.minecraft.client.settings.GameSettings;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.item.ItemStack;
+import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.MathHelper;
 import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.util.MovementInput;
@@ -238,10 +241,17 @@ public final class FreecamClient {
             }
             double forward = (down(MC.gameSettings.keyBindForward) ? 1 : 0) - (down(MC.gameSettings.keyBindBack) ? 1 : 0);
             double right = (down(MC.gameSettings.keyBindRight) ? 1 : 0) - (down(MC.gameSettings.keyBindLeft) ? 1 : 0);
+            double up = (down(MC.gameSettings.keyBindJump) || isKeyDown(Keyboard.KEY_SPACE) ? 1 : 0)
+                    - (down(MC.gameSettings.keyBindSprint) || isKeyDown(Keyboard.KEY_LCONTROL) || isKeyDown(Keyboard.KEY_RCONTROL) ? 1 : 0);
             double[] offset = FreecamMotion.pan(camera.rotationYaw, forward, right, elapsed);
+            double yOffset = FreecamMotion.vertical(up, elapsed);
             double nextX = FreecamRange.clampCamera(player.posX, camera.posX + offset[0]);
+            double nextY = FreecamRange.clampCamera(player.posY, camera.posY + yOffset);
             double nextZ = FreecamRange.clampCamera(player.posZ, camera.posZ + offset[1]);
-            camera.setPosition(nextX, camera.posY, nextZ);
+            if (yOffset < 0) {
+                nextY = Math.max(nextY, getDropFloor(nextX, camera.posY, nextZ));
+            }
+            camera.setPosition(nextX, nextY, nextZ);
             syncCamera();
         }
         if (dragging != rotate) ModLog.info("Camera dragging=" + rotate + "; yaw=" + camera.rotationYaw + "; pitch=" + camera.rotationPitch);
@@ -250,10 +260,33 @@ public final class FreecamClient {
         mouseY = y;
     }
 
+    private static double getDropFloor(double x, double startY, double z) {
+        if (MC.theWorld == null) return -29999984.0;
+        int blockX = MathHelper.floor_double(x);
+        int blockZ = MathHelper.floor_double(z);
+        if (!MC.theWorld.blockExists(blockX, 64, blockZ)) return -29999984.0;
+        int fromY = MathHelper.clamp_int(MathHelper.floor_double(startY), 0, 255);
+        for (int by = fromY; by >= 0; by--) {
+            Block block = MC.theWorld.getBlock(blockX, by, blockZ);
+            if (block == null || block.isAir(MC.theWorld, blockX, by, blockZ)) continue;
+            Material material = block.getMaterial();
+            if (material.isSolid() || material.isLiquid()) {
+                AxisAlignedBB box = block.getCollisionBoundingBoxFromPool(MC.theWorld, blockX, by, blockZ);
+                if (box != null) return box.maxY;
+                return by + 1.0;
+            }
+        }
+        return 0.0;
+    }
+
+    private static boolean isKeyDown(int code) {
+        return code > 0 && code < Keyboard.KEYBOARD_SIZE && Keyboard.isKeyDown(code);
+    }
+
     private static boolean down(KeyBinding key) {
         int code = key.getKeyCode();
         return code < 0 ? code + 100 >= 0 && code + 100 < Mouse.getButtonCount() && Mouse.isButtonDown(code + 100)
-                : code > 0 && code < Keyboard.KEYBOARD_SIZE && Keyboard.isKeyDown(code);
+                : isKeyDown(code);
     }
 
     @SubscribeEvent
