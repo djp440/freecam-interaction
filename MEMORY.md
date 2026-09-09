@@ -53,3 +53,7 @@
 - 2026-09-09 21:40：完成自由视角模式下相机移动范围限制在交互范围 +50% 的双版本改造。经两阶段意图补齐与非硬编码确认，在 `src/forge1710` 与 `src/main` 的 `FreecamRange` 中实现 `cameraReach()` 动态派生方法（`(SIZE / 2.0) * 1.5`）和 `clampCamera(player, camera)` 独立轴向截断保护（兼顾世界边界 `±29999984` 与 NaN 防护）。1.7.10 的 `FreecamClient` 与 1.21.1 的 `FreecamSession` 平移时均直接接入 `FreecamRange.clampCamera`，杜绝散落魔法数字，为后续交互范围动态化预留联动基础。同步更新 `scripts/LegacyCheck.java` 和 `scripts/CameraMotionCheck.java` 自检断言。执行 `scripts/forge1710.ps1 check` 与 `smoke` 冒烟全部通过。
 
 - 2026-09-09 21:43：启动 lwjgl3ify 实例供用户进行真实桌面交互验收，用户人工实机体验自由视角平移、边界阻挡与滑动效果，确认功能符合预期并通过测试。据用户明确指令将相机可移动范围限制在交互范围 +50% 及 lwjgl3ify 自适应补丁提交至分支 `codex/forge-1.7.10`。
+
+- 2026-09-09 21:46：完成 intent-completion 两道确认后实施 1.7.10 自由视角移除屏幕中心十字光标功能。在 `FreecamClient` 中订阅 `RenderGameOverlayEvent.Pre`，当事件类型为 `CROSSHAIRS` 且 `current()` 为 true 时取消事件渲染，彻底隐藏自由视角下的原版中心十字准星；退出模式或切换世界自动恢复。执行 `scripts/forge1710.ps1 smoke` 构建及 Java 8 冒烟测试验证通过（日志 `logs/tools/2026-09-09 21-45-00.log`）。
+
+- 2026-09-09 21:51：启动 lwjgl3ify 实例供用户进行实机桌面交互验收，用户人工体验确认自由视角模式下屏幕中心十字光标已成功隐藏、方块选取正常且退出模式后准星恢复，明确反馈“验收通过，提交”。据此记录用户验收通过并准备提交至分支 `codex/forge-1.7.10`。

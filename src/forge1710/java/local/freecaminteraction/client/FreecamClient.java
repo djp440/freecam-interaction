@@ -278,6 +278,13 @@ public final class FreecamClient {
     }
 
     @SubscribeEvent
+    public void crosshair(RenderGameOverlayEvent.Pre event) {
+        if (event.type == RenderGameOverlayEvent.ElementType.CROSSHAIRS && current()) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
     public void hud(RenderGameOverlayEvent.Post event) {
         if (event.type != RenderGameOverlayEvent.ElementType.ALL || !current() || MC.currentScreen != null || MC.gameSettings.hideGUI) return;
         int width = event.resolution.getScaledWidth();
