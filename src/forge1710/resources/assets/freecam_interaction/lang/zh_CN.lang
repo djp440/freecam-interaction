@@ -1,0 +1,5 @@
+key.freecam_interaction.enter=切换自由视角
+key.categories.freecam_interaction=自由视角交互
+screen.freecam_interaction.title=自由视角交互
+screen.freecam_interaction.help=WASD 平移 | 中键旋转 | 左键挖掘 | 右键使用/放置 | %s 退出
+screen.freecam_interaction.unsupported=服务器未确认交互支持，当前仅观察 | %s 退出

@@ -1,51 +1,43 @@
 plugins {
     id 'java-library'
-    id 'net.neoforged.moddev' version '2.0.146'
+    id 'com.gtnewhorizons.retrofuturagradle' version '2.0.4'
 }
-
-version = mod_version
-group = mod_group_id
-base.archivesName = mod_id
-java.toolchain.languageVersion = JavaLanguageVersion.of(21)
-
-neoForge {
-    version = project.neo_version
-    runs {
-        client {
-            client()
-            gameDirectory = project.file('run/client')
-        }
-        server {
-            server()
-            gameDirectory = project.file('run/server')
-            programArgument '--nogui'
-        }
-    }
-    mods {
-        "${mod_id}" {
-            sourceSet sourceSets.main
-        }
-    }
+group = 'local.freecaminteraction'
+version = '0.1.0-forge1710-experiment'
+base.archivesName = 'freecam_interaction'
+java.toolchain.languageVersion = JavaLanguageVersion.of(8)
+minecraft {
+    mcVersion.set('1.7.10')
+    username.set('FreecamTester')
+    extraRunJvmArguments.add('-Dfile.encoding=UTF-8')
 }
-
-tasks.named('processResources', ProcessResources) {
-    def properties = [mod_id: mod_id, mod_name: mod_name, mod_version: mod_version,
-                      minecraft_version: minecraft_version, neo_version: neo_version]
-    inputs.properties properties
+// 旧版入口独立编译；src/main 保留为迁移参考，不进入产物。
+sourceSets.main {
+    java.setSrcDirs(['src/forge1710/java'])
+    resources.setSrcDirs(['src/forge1710/resources'])
+}
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+tasks.named('processResources') {
     filteringCharset = 'UTF-8'
-    filesMatching('META-INF/neoforge.mods.toml') {
-        expand properties
-    }
+    inputs.property('version', project.version)
+    filesMatching('mcmod.info') { expand(version: project.version) }
 }
 
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8'
+// LWJGL2 的 OpenAL 使用本地路径加载，中文工作树下需要纯 ASCII 缓存路径。
+def nativeCache = new File(gradle.gradleUserHomeDir, 'caches/freecam-interaction/lwjgl2-2.9.4')
+tasks.register('prepareNativeCache', Copy) {
+    dependsOn 'extractNatives2'
+    from layout.projectDirectory.dir('run/natives/lwjgl2')
+    into nativeCache
+}
+tasks.named('runClient') {
+    dependsOn 'prepareNativeCache'
+    systemProperty 'org.lwjgl.librarypath', nativeCache.absolutePath
 }
 
-tasks.register('interactionCheck', JavaExec) {
-    dependsOn tasks.named('classes')
-    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
-    classpath = sourceSets.main.runtimeClasspath + sourceSets.main.compileClasspath
-    mainClass = 'scripts/InteractionCheck.java'
-    jvmArgs '-ea', '-Dfile.encoding=UTF-8'
+jar {
+    manifest.attributes('FMLCorePlugin': 'local.freecaminteraction.core.FreecamLoadingPlugin', 'FMLCorePluginContainsFMLMod': 'true')
+}
+tasks.matching { it.name in ['runClient', 'runServer'] }.configureEach {
+    systemProperty 'fml.coreMods.load', 'local.freecaminteraction.core.FreecamLoadingPlugin'
 }

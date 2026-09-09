@@ -21,3 +21,31 @@
 - 2026-09-08 21:29：完成 intent-completion 两道确认后改造相机输入。最终约定以本条为准：默认 G 切换、右上角 X 按钮退出；Esc 不退出，而是保留原版游戏菜单和设置。模式独立于 Screen，E 背包及数字键/滚轮快捷栏沿用原版，菜单/失焦暂停相机控制，异常会话恢复状态。
 - 2026-09-08 21:29：删除 GodviewScreen，新增 GodviewSession 与纯数学 GodviewMotion；WASD 相对视角水平等速平移，中键拖拽改变相机角度，俯仰限制 ±85°。通过 Camera.setPosition(Vec3) 的最小访问转换器在原生避障前设置锚点，不传送玩家或请求远程区块；模式内取消物品交互。HUD 中英文帮助读取当前绑定键。
 - 2026-09-08 21:29：`scripts/dev.ps1 smoke` 构建、产物检查和无框架运动自检通过，日志 `logs/tools/2026-09-08 21-29-04.log`；`git diff --check` 通过，仅有 Windows 换行提示。保留既有 EventBusSubscriber 弃用警告。未执行真实客户端交互/目视验收，后续按 ACCEPTANCE.md 体验。当前未提供知识图谱工具，依赖接口直接核对本地固定版本源码。
+
+- 2026-09-09 12:20：用户提出计划移植到 Minecraft 1.7.10 / Forge，并兼容 GTNH 社区维护的 lwjgl3ify。本轮完成初步源码与上游资料调研，尚未实施移植；目标 lwjgl3ify/整合包版本、是否兼容无 lwjgl3ify 环境和维护方式待明确。建议采用 GTNH ExampleMod1.7.10/GTNHGradle 工具链，独立维护旧版实现；具体依赖需按目标环境固定。图谱工具本轮不可用，已回退源码读取。保留工作区既有未提交修改；未运行游戏或编程测试。上游：https://github.com/GTNewHorizons/lwjgl3ify 、https://github.com/GTNewHorizons/ExampleMod1.7.10 。
+
+- 2026-09-09 12:23：用户明确要求新工作树迁移，已从 509b278 建立 codex/forge-1.7.10，工作树 C:/Users/15575/project/上帝视角建造-forge1710；同步原工作区未提交的项目说明和调研记忆。实验顺序已确认：先 Forge 1.7.10 原生 LWJGL2，再加入 lwjgl3ify 对比。迁移实现和验证均在此工作树进行。
+
+- 2026-09-09 12:43：Forge 1.7.10 原生 LWJGL2 实验已实现基础相机，用户明确人工确认平移、旋转、背包返回可用，且相机移动时玩家坐标保持不变；这四项不再重复测试。12:36 的 scripts/forge1710.ps1 smoke 已通过 Java 8 编译、运动断言、日志初始化与 JAR 检查，日志 logs/tools/2026-09-09 12-36-50.log。此前已目视主菜单、Mod 列表、新建世界、保存退出和重新进入。光标建造交互及 lwjgl3ify 对比仍未完成，不将相机验收扩大为完整移植通过。
+- 2026-09-09 12:43：旧版实验位于 src/forge1710，构建使用 RFG 2.0.4 / Gradle 9.2.1 / JDK 25，游戏与 Mod 使用 Java 8u504。原生 LWJGL2 的 OpenAL 在中文 native 路径下加载失败，复制至 Gradle 用户缓存纯英文路径并设置 org.lwjgl.librarypath 后重启不再报该错。minecraft-gameplay 控制器自检 50 项通过；scripts/gameplay.py 复用其输入保护并补充 G 键，不修改全局技能。
+
+- 2026-09-09 12:53：继续旧版迁移，新增 GodviewSelection：按 RenderWorldLastEvent 实际 GL 矩阵反投影鼠标，首个原版射线命中按 GodviewRange 限制；显示受深度遮挡的范围线框与原版选中方块包围框。复用原版范围类，新增负坐标/边界/NaN 断言。scripts/forge1710.ps1 smoke 通过（logs/tools/2026-09-09 12-49-35.log）。尚未实现外露面呼吸高亮、建造协议、服务端校验或 lwjgl3ify 对比。
+- 2026-09-09 12:53：本轮客户端启动在进入世界前音频崩溃：run/crash-reports/crash-2026-09-09_12.51.19-client.txt，OpenAL AL10.nalGetSourcei UnsatisfiedLinkError。fml-client-latest.log 显示 Thread-8 已初始化 OpenAL，Thread-10 再次初始化报 Only one OpenAL context；源码 SoundManager.loadSoundSystem 异步启动线程后才设置 loaded，reloadSoundSystem 可再次触发。此前纯英文 native 路径只解决 DLL 查找，不代表音频完全修复。新选择渲染尚未目视验证；客户端已崩溃结束，无继续控制。
+
+- 2026-09-09 19:24：原生 LWJGL2 启动稳定性已修复。核心补丁将 `SoundManager.loadSoundSystem` 内 `Thread.start()` 改为在原同步方法内 `run()`，关闭 `loaded` 置位前的重入窗口；多次真实启动完成清理及重载，未再出现 OpenAL context 竞争或 `nalGetSourcei` 崩溃。最近启动日志 `logs/tools/2026-09-09 19-20-58.log`。Forge 旧版版本检查返回非 JSON 的后台异常仍存在，与 Mod 和音频无关。
+- 2026-09-09 19:24：交互无效的直接原因有两处：客户端仍强制松开攻击/使用键且未调用 `PlayerControllerMP`；网络层把同一 Mode 类注册为两个 discriminator，后注册覆盖发送编号。现已直接复用 `clickBlock`、`onPlayerDamageBlock`、`onPlayerRightClick`，并拆分 `ModeRequest`/`ModeAck`。实际日志确认服务端模式开启、确认及退出恢复。
+- 2026-09-09 19:24：创造世界已真实验证左键移除方块与右键放置海绵；生存世界已验证持续左键 1.5 秒遵循原版破坏计时。截图 `logs/acceptance/interaction-break.png`、`interaction-place.png`、`survival2-break.png`。服务端扩大玩家 reach 后仍走原版 C07/C08、ItemInWorldManager、Forge 权限/交互/破坏/放置事件，并按玩家脚底 16 格范围验证目标与实际放置结果。
+- 2026-09-09 19:24：原版十类容器的距离调用由核心补丁定点路由到同一范围函数，避免远程打开后立即关闭；不全局修改 Entity 距离，以免放宽实体交互。第三方自定义容器尚未验证，留待 lwjgl3ify/GTNH 兼容阶段。`scripts/forge1710.ps1 smoke` 通过（`logs/tools/2026-09-09 19-16-32.log`）；lwjgl3ify 尚未加入。
+- 2026-09-09 19:27：最终原生 LWJGL2 冒烟通过（`logs/tools/2026-09-09 19-27-06.log`），生存实验世界已保存，客户端正常关闭；Mod 日志确认服务端模式从 true 恢复为 false，客户端收到关闭确认。当前阶段完成，下一步是建立隔离 lwjgl3ify 实例做同功能对比。
+- 2026-09-09 20:02：完成 lwjgl3ify 对比。固定 lwjgl3ify 3.0.33、UniMixins 0.3.1、Iron Chests 6.1.13 和 Java 25；独立实例使用纯 ASCII 路径 `%LOCALAPPDATA%/GodviewBuild/lwjgl3ify-3.0.33/instance`，避免 Java 25 参数文件将中文工作树路径按 ANSI 解码。日志 `logs/tools/2026-09-09 19-44-44.log` 确认 RFB、UniMixins、LWJGL3 3.4.2、本 Mod 与 Iron Chest 共存，`TileEntityIronChest` 被容器距离转换器改写。用户人工确认主菜单、世界、上帝视角、平移和第三方容器放置/远程打开成功；截图 `logs/acceptance/lwjgl3ify-main.png`、`lwjgl3ify-godview.png`、`lwjgl3ify-ironchest-placed.png`。该证据只覆盖最小实例，不代表整个 GTNH 整合包。
+
+- 2026-09-09 20:58：完成 intent-completion 两道确认，全量重命名 Mod 标识符与类名。显示名称由“上帝视角建造”改为“自由视角交互”，Mod ID 由 `godview_build` 改为 `freecam_interaction`，基础包名由 `local.godviewbuild` 改为 `local.freecaminteraction`，类名前缀由 `Godview*` 改为 `Freecam*`，日志目录更新为 `logs/freecam_interaction`。1.7.10 与 1.21.1 源码、资源路径、元数据、Mixin/CoreMod 属性及自检脚本全部同步完成。`scripts/forge1710.ps1 smoke` 构建与冒烟测试通过，产物 `freecam_interaction-0.1.0-forge1710-experiment.jar` 结构验证通过；`scripts/lwjgl3ify.ps1 smoke` 冒烟准备通过。
+
+- 2026-09-09 21:12：使用 `minecraft-gameplay` 技能与 `real-user-acceptance` 路径对 lwjgl3ify 独立实例进行真实交互测试与闭环验证。
+  - 主菜单及 Mods 列表：成功识别 Mod 显示名称为“自由视角交互”，Mod ID 为 `freecam_interaction`，无任何乱码或旧命名残留（凭证：`logs/acceptance/freecam-mod-details.png`）。
+  - 创建并进入世界：按 G 键成功切换进入自由视角模式，HUD 标题与操作指引正确渲染，玩家俯视视角正常（凭证：`logs/acceptance/freecam-mode-active.png`）。
+  - 退出与恢复：再次按 G 键成功退出自由视角，平移相机恢复玩家原位，网络层同步发送模式注销。
+  - 日志闭环：独立日志文件在 `logs/freecam_interaction/2026-09-09 21-05-09.log` 成功生成并完整记录进入/退出生命周期。
+  - 游戏正常保存世界并返回主菜单后退出。全部测试通过。
+
+- 2026-09-09 21:18：用户明确指令“提交”，据此将全量重命名（“自由视角交互”、`freecam_interaction`、`local.freecaminteraction`、`Freecam*`）、Forge 1.7.10 移植实验实现、NeoForge 1.21.1 迁移参考、自动化自检脚本与验收文档提交至分支 `codex/forge-1.7.10`。冒烟及真实游戏内验收均已留存凭证通过。

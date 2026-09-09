@@ -1,0 +1,9 @@
+[
+  {
+    "modid": "freecam_interaction",
+    "name": "自由视角交互",
+    "description": "Forge 1.7.10 原生 LWJGL2 移植实验",
+    "version": "${version}",
+    "mcversion": "1.7.10"
+  }
+]

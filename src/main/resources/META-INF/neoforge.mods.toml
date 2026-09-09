@@ -6,10 +6,10 @@ license="All Rights Reserved"
 modId="${mod_id}"
 version="${mod_version}"
 displayName="${mod_name}"
-description='''上帝视角建造：高位第三人称观察，以鼠标选取玩家周围 16 格立方体范围内的方块进行挖掘、放置和交互。'''
+description='''自由视角交互：高位第三人称观察，以鼠标选取玩家周围 16 格立方体范围内的方块进行挖掘、放置和交互。'''
 
 [[mixins]]
-config="godview_build.mixins.json"
+config="freecam_interaction.mixins.json"
 
 [[dependencies.${mod_id}]]
 modId="neoforge"

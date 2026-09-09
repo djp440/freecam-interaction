@@ -1,6 +1,7 @@
 .gradle/
 build/
 run/
+run-lwjgl3ify/
 logs/
 .idea/
 *.iml
