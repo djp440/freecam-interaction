@@ -3,6 +3,7 @@ package local.godviewbuild.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import local.godviewbuild.ModLog;
 import local.godviewbuild.GodviewInteraction;
+import local.godviewbuild.GodviewRange;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.KeyMapping;
@@ -10,9 +11,14 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.lwjgl.glfw.GLFW;
 
 final class GodviewSession {
@@ -91,13 +97,45 @@ final class GodviewSession {
         mouseY = currentY;
         double forward = (down(client.options.keyUp) ? 1 : 0) - (down(client.options.keyDown) ? 1 : 0);
         double right = (down(client.options.keyRight) ? 1 : 0) - (down(client.options.keyLeft) ? 1 : 0);
-        if (forward != 0 || right != 0) {
+        double up = (down(client.options.keyJump) || isKeyDown(GLFW.GLFW_KEY_SPACE) ? 1 : 0)
+                - (down(client.options.keySprint) || isKeyDown(GLFW.GLFW_KEY_LEFT_CONTROL) || isKeyDown(GLFW.GLFW_KEY_RIGHT_CONTROL) ? 1 : 0);
+        if (forward != 0 || right != 0 || up != 0) {
             var offset = GodviewMotion.pan(yaw, forward, right, elapsed);
-            double nextX = anchor.x + offset.x();
-            double nextZ = anchor.z + offset.z();
-            anchor = new Vec3(Mth.clamp(nextX, -29_999_984.0, 29_999_984.0), anchor.y,
-                    Mth.clamp(nextZ, -29_999_984.0, 29_999_984.0));
+            double yOffset = GodviewMotion.vertical(up, elapsed);
+            double nextX = GodviewRange.clampCamera(originPlayer.getX(), anchor.x + offset.x());
+            double nextY = GodviewRange.clampCamera(originPlayer.getY(), anchor.y + yOffset);
+            double nextZ = GodviewRange.clampCamera(originPlayer.getZ(), anchor.z + offset.z());
+            if (yOffset < 0) {
+                nextY = Math.max(nextY, getDropFloor(client.level, nextX, anchor.y, nextZ));
+            }
+            anchor = new Vec3(nextX, nextY, nextZ);
         }
+    }
+
+    private static double getDropFloor(Level level, double x, double startY, double z) {
+        if (level == null) return -29999984.0;
+        int blockX = Mth.floor(x);
+        int blockZ = Mth.floor(z);
+        int minBuildY = level.getMinBuildHeight();
+        int fromY = Mth.clamp(Mth.floor(startY), minBuildY, level.getMaxBuildHeight() - 1);
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        for (int by = fromY; by >= minBuildY; by--) {
+            pos.set(blockX, by, blockZ);
+            BlockState state = level.getBlockState(pos);
+            if (state.isAir()) continue;
+            if (state.isSolid() || !state.getFluidState().isEmpty()) {
+                VoxelShape shape = state.getCollisionShape(level, pos);
+                if (!shape.isEmpty()) {
+                    return by + shape.max(Direction.Axis.Y);
+                }
+                return by + 1.0;
+            }
+        }
+        return minBuildY;
+    }
+
+    boolean isKeyDown(int key) {
+        return key >= 0 && InputConstants.isKeyDown(client.getWindow().getWindow(), key);
     }
 
     boolean down(KeyMapping mapping) {

@@ -21,3 +21,7 @@
 - 2026-09-08 21:29：完成 intent-completion 两道确认后改造相机输入。最终约定以本条为准：默认 G 切换、右上角 X 按钮退出；Esc 不退出，而是保留原版游戏菜单和设置。模式独立于 Screen，E 背包及数字键/滚轮快捷栏沿用原版，菜单/失焦暂停相机控制，异常会话恢复状态。
 - 2026-09-08 21:29：删除 GodviewScreen，新增 GodviewSession 与纯数学 GodviewMotion；WASD 相对视角水平等速平移，中键拖拽改变相机角度，俯仰限制 ±85°。通过 Camera.setPosition(Vec3) 的最小访问转换器在原生避障前设置锚点，不传送玩家或请求远程区块；模式内取消物品交互。HUD 中英文帮助读取当前绑定键。
 - 2026-09-08 21:29：`scripts/dev.ps1 smoke` 构建、产物检查和无框架运动自检通过，日志 `logs/tools/2026-09-08 21-29-04.log`；`git diff --check` 通过，仅有 Windows 换行提示。保留既有 EventBusSubscriber 弃用警告。未执行真实客户端交互/目视验收，后续按 ACCEPTANCE.md 体验。当前未提供知识图谱工具，依赖接口直接核对本地固定版本源码。
+
+- 2026-09-09 12:20：用户提出计划移植到 Minecraft 1.7.10 / Forge，并兼容 GTNH 社区维护的 lwjgl3ify。本轮完成初步源码与上游资料调研，尚未实施移植；目标 lwjgl3ify/整合包版本、是否兼容无 lwjgl3ify 环境和维护方式待明确。建议采用 GTNH ExampleMod1.7.10/GTNHGradle 工具链，独立维护旧版实现；具体依赖需按目标环境固定。图谱工具本轮不可用，已回退源码读取。保留工作区既有未提交修改；未运行游戏或编程测试。上游：https://github.com/GTNewHorizons/lwjgl3ify 、https://github.com/GTNewHorizons/ExampleMod1.7.10 。
+
+- 2026-09-09 22:30：完成 intent-completion 两道确认后将 1.7.10 验证的新特性全量同步到 1.21.1（NeoForge）。在 `GodviewClient` 监听 `RenderGuiLayerEvent.Pre` 取消 `VanillaGuiLayers.CROSSHAIR` 隐藏中心十字准星；在 `GodviewRange` 与 `GodviewMotion` 增加范围截断与垂直速度计算；在 `GodviewSession` 接入空格抬升与 Ctrl 降低，并实现 `getDropFloor`（基于 `VoxelShape` 和 `Level.getMinBuildHeight` 的下落触底防穿透）；双语提示补充“空格/Ctrl 升降”。`scripts/dev.ps1 smoke` 构建、交互检查与相机自检全部通过（日志 `logs/tools/2026-09-09 22-30-08.log`）。

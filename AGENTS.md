@@ -17,3 +17,5 @@ Minecraft 1.21.1 / NeoForge 的“上帝视角建造”Mod，已实现高位第�
 - Mod 日志在运行目录 `logs/godview_build`，工具日志在项目 `logs/tools`；Windows 文件名使用 `yyyy-MM-dd HH-mm-ss.log`。
 - 保留 Minecraft/Gradle 原生日志，不删除用户存档，不自动接受 EULA。
 - 维护 MEMORY.md，记录精确到分钟的决定及验证结果。
+
+- 1.7.10 移植处于调研阶段：用户计划支持 Forge 1.7.10 与 lwjgl3ify；现有工程仍为 1.21.1，目标依赖版本与整合包兼容范围尚未确定，不能将 lwjgl3ify 兼容等同于整个 GTNH 整合包兼容。
