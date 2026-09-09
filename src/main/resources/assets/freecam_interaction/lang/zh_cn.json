@@ -3,6 +3,6 @@
   "key.freecam_interaction.enter": "切换自由视角",
   "screen.freecam_interaction.title": "自由视角",
   "screen.freecam_interaction.close": "退出自由视角",
-  "screen.freecam_interaction.help": "%s/%s/%s/%s 平移 · 中键旋转 · 左键挖掘/右键使用 · Shift 辅助交互 · 数字键/滚轮选物 · %s 背包 · Esc 菜单 · %s 或 X 退出",
+  "screen.freecam_interaction.help": "%s/%s/%s/%s 平移 · 空格/Ctrl 升降 · 中键旋转 · 左键挖掘/右键使用 · Shift 辅助交互 · 数字键/滚轮选物 · %s 背包 · Esc 菜单 · %s 或 X 退出",
   "screen.freecam_interaction.unsupported": "服务器未支持自由视角交互；当前仅可观察。请在服务器安装相同版本的自由视角交互。"
 }

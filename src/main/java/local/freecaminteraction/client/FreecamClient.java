@@ -19,6 +19,8 @@ import net.neoforged.neoforge.client.event.ViewportEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.RenderFrameEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
+import net.neoforged.neoforge.client.event.RenderGuiLayerEvent;
+import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 import net.neoforged.neoforge.client.settings.KeyConflictContext;
 import org.lwjgl.glfw.GLFW;
 
@@ -120,6 +122,13 @@ public final class FreecamClient {
             } else {
                 session.update();
             }
+        }
+    }
+
+    @SubscribeEvent
+    public static void onRenderGuiLayer(RenderGuiLayerEvent.Pre event) {
+        if (session != null && session.isCurrentSession() && VanillaGuiLayers.CROSSHAIR.equals(event.getName())) {
+            event.setCanceled(true);
         }
     }
 

@@ -11,9 +11,14 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.lwjgl.glfw.GLFW;
 
 final class FreecamSession {
@@ -100,8 +105,33 @@ final class FreecamSession {
             double nextX = FreecamRange.clampCamera(originPlayer.getX(), anchor.x + offset.x());
             double nextY = FreecamRange.clampCamera(originPlayer.getY(), anchor.y + yOffset);
             double nextZ = FreecamRange.clampCamera(originPlayer.getZ(), anchor.z + offset.z());
+            if (yOffset < 0) {
+                nextY = Math.max(nextY, getDropFloor(client.level, nextX, anchor.y, nextZ));
+            }
             anchor = new Vec3(nextX, nextY, nextZ);
         }
+    }
+
+    private static double getDropFloor(Level level, double x, double startY, double z) {
+        if (level == null) return -29999984.0;
+        int blockX = Mth.floor(x);
+        int blockZ = Mth.floor(z);
+        int minBuildY = level.getMinBuildHeight();
+        int fromY = Mth.clamp(Mth.floor(startY), minBuildY, level.getMaxBuildHeight() - 1);
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        for (int by = fromY; by >= minBuildY; by--) {
+            pos.set(blockX, by, blockZ);
+            BlockState state = level.getBlockState(pos);
+            if (state.isAir()) continue;
+            if (state.isSolid() || !state.getFluidState().isEmpty()) {
+                VoxelShape shape = state.getCollisionShape(level, pos);
+                if (!shape.isEmpty()) {
+                    return by + shape.max(Direction.Axis.Y);
+                }
+                return by + 1.0;
+            }
+        }
+        return minBuildY;
     }
 
     boolean isKeyDown(int key) {

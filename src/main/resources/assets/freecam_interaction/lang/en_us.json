@@ -3,6 +3,6 @@
   "key.freecam_interaction.enter": "Toggle Freecam",
   "screen.freecam_interaction.title": "FREECAM",
   "screen.freecam_interaction.close": "Exit Freecam",
-  "screen.freecam_interaction.help": "%s/%s/%s/%s Pan · Middle-drag Rotate · Left Mine/Right Use · Shift Secondary use · Number keys/Wheel Select · %s Inventory · Esc Menu · %s or X Exit",
+  "screen.freecam_interaction.help": "%s/%s/%s/%s Pan · Space/Ctrl Elevate · Middle-drag Rotate · Left Mine/Right Use · Shift Secondary use · Number keys/Wheel Select · %s Inventory · Esc Menu · %s or X Exit",
   "screen.freecam_interaction.unsupported": "This server does not support Freecam interaction. Observation only; install the same Freecam Interaction version on the server."
 }

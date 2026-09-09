@@ -65,3 +65,5 @@
 - 2026-09-09 22:09：修复相机在平移/旋转中偶发瞬移至树顶或屋顶的问题。根因为 `surfaceY` 在无下落意图时每帧无条件扫描上方并强制截断，将悬空树叶与房檐误判为地面支撑面并强制传送。重构为 `getDropFloor`：严格限制仅在长按 Ctrl 往下落时（`yOffset < 0`）触发触底阻挡，且扫描起点严格从相机脚底向下扫描，杜绝头顶树叶误判；水平平移（WASD）与中键旋转绝对不干涉 Y 轴，彻底消除瞬移与高低跳跃，同时完美保留玩家站在高处俯瞰并下落到低处地面的能力。`scripts/forge1710.ps1 smoke` 构建与冒烟通过（`logs/tools/2026-09-09 22-09-20.log`）。
 
 - 2026-09-09 22:24：启动 lwjgl3ify 实例供用户实机体验。用户反馈升降与方块交互体验仍存在微小瑕疵（原版第三人称视角在极端角度/复杂遮挡下可能存在视距伸缩体验差异），但不影响基础升降与交互使用，决定按当前状态提交保存。据用户指令将自由视角空格/Ctrl垂直升降与下落触底阻挡功能提交至分支 `codex/forge-1.7.10`。
+
+- 2026-09-09 22:30：完成 intent-completion 两道确认后，将自由视角隐藏中心准星、空格/Ctrl垂直升降与下落触底防穿透完整同步至 1.21.1（NeoForge）。在 `FreecamClient` 订阅 `RenderGuiLayerEvent.Pre` 取消 `VanillaGuiLayers.CROSSHAIR`；在 `FreecamSession` 中接入空格与 Ctrl 升降，并利用 `VoxelShape` 与 `Level.getMinBuildHeight` 实现下落阻挡；更新双语操作指引；当前工作树 `src/main` 与主工作树 `C:\Users\15575\project\上帝视角建造` 均完成源码同步，`scripts/dev.ps1 smoke`（交互自检、相机自检与 NeoForge 构建）全部通过，主工作树已提交（commit `a225747`）。
