@@ -8,6 +8,7 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import local.godviewbuild.GodviewBuild;
 import local.godviewbuild.GodviewGeometry;
 import local.godviewbuild.GodviewInteraction;
+import local.godviewbuild.GodviewRange;
 import local.godviewbuild.ModLog;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
@@ -166,9 +167,72 @@ public final class GodviewSelection {
             viewportHeight = Minecraft.getInstance().getWindow().getHeight();
             pick();
         } else if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_LEVEL
-                && GodviewClient.canBuild() && selected != null) {
-            renderFace(event);
+                && Minecraft.getInstance().screen == null && Minecraft.getInstance().getOverlay() == null) {
+            Minecraft client = Minecraft.getInstance();
+            if (!client.options.hideGui && GodviewInteraction.active(client.player)) {
+                renderRange(event);
+            }
+            if (GodviewClient.canBuild() && selected != null) {
+                renderFace(event);
+            }
         }
+    }
+
+    private static void renderRange(RenderLevelStageEvent event) {
+        Vec3 player = Minecraft.getInstance().player.position();
+        double minX = GodviewRange.minimumBlock(player.x);
+        double minY = GodviewRange.minimumBlock(player.y);
+        double minZ = GodviewRange.minimumBlock(player.z);
+        AABB range = new AABB(minX, minY, minZ,
+                minX + GodviewRange.SIZE, minY + GodviewRange.SIZE, minZ + GodviewRange.SIZE)
+                .move(event.getCamera().getPosition().reverse());
+        var previousShader = RenderSystem.getShader();
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.enableDepthTest();
+        RenderSystem.depthMask(false);
+        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+        try {
+            var buffer = Tesselator.getInstance().begin(VertexFormat.Mode.DEBUG_LINES, DefaultVertexFormat.POSITION_COLOR);
+            for (int axis = 0; axis < 3; axis++) {
+                for (int sideA = 0; sideA < 2; sideA++) {
+                    for (int sideB = 0; sideB < 2; sideB++) {
+                        addEdge(buffer, event.getModelViewMatrix(), range, axis, sideA != 0, sideB != 0);
+                    }
+                }
+            }
+            BufferUploader.drawWithShader(buffer.buildOrThrow());
+        } finally {
+            RenderSystem.depthMask(true);
+            RenderSystem.disableBlend();
+            RenderSystem.setShader(() -> previousShader);
+        }
+    }
+
+    private static void addEdge(com.mojang.blaze3d.vertex.VertexConsumer buffer, Matrix4f matrix,
+            AABB box, int axis, boolean sideA, boolean sideB) {
+        double x = box.minX;
+        double y = box.minY;
+        double z = box.minZ;
+        if (axis == 0) {
+            y = sideA ? box.maxY : box.minY;
+            z = sideB ? box.maxZ : box.minZ;
+        } else if (axis == 1) {
+            x = sideA ? box.maxX : box.minX;
+            z = sideB ? box.maxZ : box.minZ;
+        } else {
+            x = sideA ? box.maxX : box.minX;
+            y = sideB ? box.maxY : box.minY;
+        }
+        buffer.addVertex(matrix, (float) x, (float) y, (float) z).setColor(0.90F, 0.97F, 0.96F, 0.28F);
+        if (axis == 0) {
+            x = box.maxX;
+        } else if (axis == 1) {
+            y = box.maxY;
+        } else {
+            z = box.maxZ;
+        }
+        buffer.addVertex(matrix, (float) x, (float) y, (float) z).setColor(0.90F, 0.97F, 0.96F, 0.28F);
     }
 
     private static void renderFace(RenderLevelStageEvent event) {

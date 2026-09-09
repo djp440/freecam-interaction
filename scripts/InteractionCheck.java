@@ -23,6 +23,14 @@ class InteractionCheck {
         assert !GodviewRange.contains(0.5, 0.5, 0.5, 0, 0, 8);
         assert !GodviewRange.contains(Double.NaN, 0, 0, 0, 0, 0);
         assert !GodviewRange.contains(Double.POSITIVE_INFINITY, 0, 0, 0, 0, 0);
+        assert GodviewRange.minimumBlock(0.5) == -8;
+        assert GodviewRange.minimumBlock(0.5001) == -7;
+        assert GodviewRange.minimumBlock(-0.5) == -9;
+        assert GodviewRange.minimumBlock(-0.4999) == -8;
+        try {
+            GodviewRange.minimumBlock(Double.NaN);
+            throw new AssertionError("NaN range origin accepted");
+        } catch (IllegalArgumentException expected) {}
         Matrix4f inverse = new Matrix4f().perspective((float) Math.toRadians(70), 16f / 9, 0.05f, 256).invert();
         Vec3 center = GodviewGeometry.direction(inverse, 0, 0);
         assert center.distanceTo(new Vec3(0, 0, -1)) < 1e-6;
