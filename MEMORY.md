@@ -1,5 +1,13 @@
 # 项目记忆
 
+- 2026-09-10 14:44：用户确认相邻 Forge 1.7.10 + lwjgl3ify 实例中的三把法杖材质游戏内验收通过并要求提交。普通蓝色、高级红色、创造紫色32×32透明贴图已正常应用；提交目标为1.7.10材质相关文件及本工作树同步记忆，1.21.1法杖功能仍待实现。
+
+- 2026-09-10 14:36：相邻 Forge 1.7.10 工作树已按用户要求启动 lwjgl3ify 验收实例，窗口 `Minecraft 1.7.10` 正常响应并留给用户验收法杖贴图。首次启动冲突源为隔离实例残留旧 `godview_build.jar`，已可恢复地移至实例 `disabled-mods`，新版 `freecam_interaction.jar` 随后正常加载；日志见相邻工作树 `logs/tools/2026-09-10 14-35-15.log`。
+
+- 2026-09-10 14:33：相邻 Forge 1.7.10 工作树确认法杖原生材质绑定与三张32×32 PNG资源名一致，执行最小冒烟成功，构建JAR已包含普通蓝色、高级红色、创造紫色贴图；日志见相邻工作树 `logs/tools/2026-09-10 14-32-55.log`。1.21.1 法杖功能仍待实现，未修改本工作树功能代码。
+
+- 2026-09-10 14:29：完成普通蓝色、高级红色、创造紫色法杖材质；内置imagegen生成，最近邻导出实际32×32透明RGBA PNG，接入1.7.10工作树src/forge1710/resources/assets/freecam_interaction/textures/items/wand_{normal,advanced,creative}.png。art/wands保留原图、提示词与4倍预览，scripts/wand-textures.ps1可复用导出检查。尺寸/透明通道检查及目视检查通过，日志logs/tools/2026-09-10 14-28-56.log；未运行游戏、构建或提交。按新规则整理MEMORY条目为时间降序；1.21.1功能仍待实现。
+
 - 2026-09-10 12:41：用户明确反馈“测试成功，提交”，据此记录 Forge 1.7.10 自由视角法杖系统在相邻工作树验收通过。按用户指令同步提交本轮文档与工作树交接记录。
 
 - 2026-09-10 12:35：根据用户任务要求与 `HANDOFF-wands-1710.md`，在相邻工作树 `../上帝视角建造-forge1710`（分支 `codex/forge-1.7.10`）完成 Forge 1.7.10 自由视角法杖系统的全量代码实现与自动化冒烟验证。实现三级法杖（普通/高级/创造）、合成与铁砧修复、背包优先级扫描（创造>高级>普通）、有效操作动作扣费、2->1自动接续（保底不损毁）、`ForgeChunkManager` 票据与 `PlayerManager` 区块订阅强加载。主工作树 1.21.1 源码未作修改保持待实现。冒烟日志 `logs/tools/2026-09-10 12-33-28.log` 全部通过。
@@ -14,28 +22,38 @@
   - 客户端整合：在 `GodviewSession.update()` 中接入求解器，先旋转后平移，平移位移经求解后同步更新锚点位置，彻底移除原单列垂直扫描的 `getDropFloor`；
   - 自动化验证：在 `InteractionCheck` 中加入 `GodviewCollision` 几何与映射、无障碍位移、旋转及包围盒断言；`scripts/dev.ps1 smoke` 构建、交互检查与相机自检全部通过（日志 `logs/tools/2026-09-10 11-51-36.log`），JAR 产物检查确认包含 `GodviewCollision.class` 与 `CameraMixin.class`。
 
+- 2026-09-09 22:30：完成 intent-completion 两道确认后将 1.7.10 验证的新特性全量同步到 1.21.1（NeoForge）。在 `GodviewClient` 监听 `RenderGuiLayerEvent.Pre` 取消 `VanillaGuiLayers.CROSSHAIR` 隐藏中心十字准星；在 `GodviewRange` 与 `GodviewMotion` 增加范围截断与垂直速度计算；在 `GodviewSession` 接入空格抬升与 Ctrl 降低，并实现 `getDropFloor`（基于 `VoxelShape` 和 `Level.getMinBuildHeight` 的下落触底防穿透）；双语提示补充“空格/Ctrl 升降”。`scripts/dev.ps1 smoke` 构建、交互检查与相机自检全部通过（日志 `logs/tools/2026-09-09 22-30-08.log`）。
+
+- 2026-09-09 12:20：用户提出计划移植到 Minecraft 1.7.10 / Forge，并兼容 GTNH 社区维护的 lwjgl3ify。本轮完成初步源码与上游资料调研，尚未实施移植；目标 lwjgl3ify/整合包版本、是否兼容无 lwjgl3ify 环境和维护方式待明确。建议采用 GTNH ExampleMod1.7.10/GTNHGradle 工具链，独立维护旧版实现；具体依赖需按目标环境固定。图谱工具本轮不可用，已回退源码读取。保留工作区既有未提交修改；未运行游戏或编程测试。上游：https://github.com/GTNewHorizons/lwjgl3ify 、https://github.com/GTNewHorizons/ExampleMod1.7.10 。
+
 - 2026-09-08 22:49：用户通过 intent-completion 两道确认，要求轻量、友好的完整三维交互范围边界。实现仅在服务器支持交互且上帝视角有效时绘制受地形遮挡的淡青白色 16×16×16 线框；中键旋转保留，菜单、覆盖层、F1、退出、死亡、换维度及断线时隐藏或随既有会话清理。不加入透视线、填色、内部网格、文字、设置或新协议。
+
 - 2026-09-08 22:49：范围线框和交互判定共用 `GodviewRange` 的 16 格尺寸与最小方块坐标计算，随玩家脚底在半格临界点同步吸附，包含负坐标与非法坐标自检。`scripts/dev.ps1 smoke` 通过，日志 `logs/tools/2026-09-08 22-49-05.log`；`git diff --check` 通过（仅换行提示）。未执行游戏内目视验收，后续需核对遮挡、透明度、FOV/窗口变化、闪烁及与选中面高亮的层次。
 
 - 2026-09-08 22:20：用户明确反馈“验收通过，提交”，据此记录光标选取、范围内挖掘/放置/容器交互与服务端校验功能验收通过；未提供逐项测试步骤，沿用 22:12 冒烟和 22:10 客户端启动检查结果。
 
 - 2026-09-08 22:12：完成光标建造的 intent-completion 两道确认后实现。交互范围固定为玩家脚底坐标中心、边长 16 的立方体，按方块中心判断、下含上不含；范围跟随玩家而非相机。光标射线首个可见方块才可选取，面高亮按实际形状外露面分割，约 2 秒呼吸周期。
+
 - 2026-09-08 22:12：通过可选服务端模式协议与 Player.canInteractWithBlock Mixin 接通范围和原版容器有效性；放置前校验实际落点，标准多方块放置事件越界取消。保留原版输入、挖掘计时、主副手与 NeoForge 事件，未支持协议的服务器仅观察。菜单/失焦/旋转后必须先松键；服务端模式失效、越界及 ABORT 清理持续/延迟挖掘。玩家朝向不伪造，硬编码距离、自行射线或连锁副作用的 Mod 不保证兼容。
+
 - 2026-09-08 22:12：最终 `scripts/dev.ps1 smoke` 通过，日志 `logs/tools/2026-09-08 22-12-41.log`；新增 InteractionCheck 覆盖范围、负坐标、非法数值、射线及立方体/半砖/楼梯外露面，使用主源码运行/编译类路径的 Java 源码启动，不引入测试框架。`git diff --check` 通过（仅换行提示）。22:10 启动客户端并目视确认主菜单，22:11 正常关闭；未进入或改动存档，未做玩法 E2E、独立服务器或第三方 Mod 验证。后续按 ACCEPTANCE.md 实际体验高亮、挖掘、放置和容器。
+
 - 2026-09-08 22:12：前次 PowerShell 管道调用 apply_patch 因 UTF-8 参数方式不正确而失败，未写入文件；本轮改用直接 apply_patch 工具成功。知识图谱工具仍不可用，按固定版本依赖源码核验关键入口。渲染选择 AFTER_LEVEL，避开半透明阶段的额外 ModelView 变换和 Fabulous 离屏目标。
 
 - 2026-09-08 21:38：用户明确反馈“验收通过，提交”，据此记录相机平移、旋转与 HUD 交互改造的用户验收通过；未提供逐项测试步骤。本次提交包含功能、自检和文档，沿用已通过的最小冒烟结果，不重复运行游戏验收。
 
-- 2026-09-08 20:04：用户完成 intent-completion 两道确认，将本次范围收敛为仅 Minecraft 1.21.1。确认名称“上帝视角建造”、ID `godview_build`、包名 `local.godviewbuild` 与 Windows 兼容日志命名。
-- 2026-09-08 20:06：原有 Oracle JDK 17.0.12、Git 2.53.0；独立安装 Temurin JDK 21.0.12.1，不改系统环境变量。项目原为空。固定官方 MDK 提交及构建依赖，不引入其他版本或游戏功能。
-- 2026-09-08 20:12：`scripts/setup.ps1` 成功下载并校验 JDK；`scripts/dev.ps1 check` 显示 Gradle 9.2.1/JDK 21；非法操作返回非零并写入日志；`scripts/dev.ps1 smoke` 构建成功，验证 JAR 入口类、日志模块、中文元数据和精确 1.21.1 范围。
-
-- 2026-09-08 20:46：按确认范围实现客户端上帝视角：默认 G 可改键，高位第三人称俯视、X/Esc 退出、非暂停、移动输入清理、断线清理、日志记录与中英文资源；`scripts/dev.ps1 smoke` 构建及产物检查通过，日志为 `logs/tools/2026-09-08 20-46-15.log`。普通 Java 测试因缺少 Minecraft 测试类路径未能运行，已移除该入口；不将构建冒烟视为玩法验收。
-- 2026-09-08 21:04：用户明确反馈“测试通过，提交”，据此记录用户验收通过并提交当前功能；未提供具体测试步骤。用户终端此前无法识别 `pwsh`，不得假定工具运行环境中的 PowerShell 7 已加入用户 PATH。
 - 2026-09-08 21:29：完成 intent-completion 两道确认后改造相机输入。最终约定以本条为准：默认 G 切换、右上角 X 按钮退出；Esc 不退出，而是保留原版游戏菜单和设置。模式独立于 Screen，E 背包及数字键/滚轮快捷栏沿用原版，菜单/失焦暂停相机控制，异常会话恢复状态。
+
 - 2026-09-08 21:29：删除 GodviewScreen，新增 GodviewSession 与纯数学 GodviewMotion；WASD 相对视角水平等速平移，中键拖拽改变相机角度，俯仰限制 ±85°。通过 Camera.setPosition(Vec3) 的最小访问转换器在原生避障前设置锚点，不传送玩家或请求远程区块；模式内取消物品交互。HUD 中英文帮助读取当前绑定键。
+
 - 2026-09-08 21:29：`scripts/dev.ps1 smoke` 构建、产物检查和无框架运动自检通过，日志 `logs/tools/2026-09-08 21-29-04.log`；`git diff --check` 通过，仅有 Windows 换行提示。保留既有 EventBusSubscriber 弃用警告。未执行真实客户端交互/目视验收，后续按 ACCEPTANCE.md 体验。当前未提供知识图谱工具，依赖接口直接核对本地固定版本源码。
 
-- 2026-09-09 12:20：用户提出计划移植到 Minecraft 1.7.10 / Forge，并兼容 GTNH 社区维护的 lwjgl3ify。本轮完成初步源码与上游资料调研，尚未实施移植；目标 lwjgl3ify/整合包版本、是否兼容无 lwjgl3ify 环境和维护方式待明确。建议采用 GTNH ExampleMod1.7.10/GTNHGradle 工具链，独立维护旧版实现；具体依赖需按目标环境固定。图谱工具本轮不可用，已回退源码读取。保留工作区既有未提交修改；未运行游戏或编程测试。上游：https://github.com/GTNewHorizons/lwjgl3ify 、https://github.com/GTNewHorizons/ExampleMod1.7.10 。
+- 2026-09-08 21:04：用户明确反馈“测试通过，提交”，据此记录用户验收通过并提交当前功能；未提供具体测试步骤。用户终端此前无法识别 `pwsh`，不得假定工具运行环境中的 PowerShell 7 已加入用户 PATH。
 
-- 2026-09-09 22:30：完成 intent-completion 两道确认后将 1.7.10 验证的新特性全量同步到 1.21.1（NeoForge）。在 `GodviewClient` 监听 `RenderGuiLayerEvent.Pre` 取消 `VanillaGuiLayers.CROSSHAIR` 隐藏中心十字准星；在 `GodviewRange` 与 `GodviewMotion` 增加范围截断与垂直速度计算；在 `GodviewSession` 接入空格抬升与 Ctrl 降低，并实现 `getDropFloor`（基于 `VoxelShape` 和 `Level.getMinBuildHeight` 的下落触底防穿透）；双语提示补充“空格/Ctrl 升降”。`scripts/dev.ps1 smoke` 构建、交互检查与相机自检全部通过（日志 `logs/tools/2026-09-09 22-30-08.log`）。
+- 2026-09-08 20:46：按确认范围实现客户端上帝视角：默认 G 可改键，高位第三人称俯视、X/Esc 退出、非暂停、移动输入清理、断线清理、日志记录与中英文资源；`scripts/dev.ps1 smoke` 构建及产物检查通过，日志为 `logs/tools/2026-09-08 20-46-15.log`。普通 Java 测试因缺少 Minecraft 测试类路径未能运行，已移除该入口；不将构建冒烟视为玩法验收。
+
+- 2026-09-08 20:12：`scripts/setup.ps1` 成功下载并校验 JDK；`scripts/dev.ps1 check` 显示 Gradle 9.2.1/JDK 21；非法操作返回非零并写入日志；`scripts/dev.ps1 smoke` 构建成功，验证 JAR 入口类、日志模块、中文元数据和精确 1.21.1 范围。
+
+- 2026-09-08 20:06：原有 Oracle JDK 17.0.12、Git 2.53.0；独立安装 Temurin JDK 21.0.12.1，不改系统环境变量。项目原为空。固定官方 MDK 提交及构建依赖，不引入其他版本或游戏功能。
+
+- 2026-09-08 20:04：用户完成 intent-completion 两道确认，将本次范围收敛为仅 Minecraft 1.21.1。确认名称“上帝视角建造”、ID `godview_build`、包名 `local.godviewbuild` 与 Windows 兼容日志命名。
