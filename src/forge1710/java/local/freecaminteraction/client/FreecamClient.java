@@ -307,6 +307,7 @@ public final class FreecamClient {
         if (hit == null || MC.theWorld.getBlock(hit.blockX, hit.blockY, hit.blockZ).isAir(MC.theWorld, hit.blockX, hit.blockY, hit.blockZ)) return;
         ItemStack item = player.inventory.getCurrentItem();
         int size = item == null ? 0 : item.stackSize;
+        FreecamActions.sendRay(selection.rayStart, selection.rayEnd, hit.hitVec);
         boolean allowed = !ForgeEventFactory.onPlayerInteract(player, PlayerInteractEvent.Action.RIGHT_CLICK_BLOCK,
                 hit.blockX, hit.blockY, hit.blockZ, hit.sideHit, MC.theWorld).isCanceled();
         if (allowed && MC.playerController.onPlayerRightClick(player, MC.theWorld, item,

@@ -68,7 +68,13 @@ function Prepare-Instance {
                     $nativePath = $libraries["native:$key"]
                     $nativeDirectory = Join-Path $instance 'natives'
                     New-Item -ItemType Directory -Force -Path $nativeDirectory | Out-Null
-                    [IO.Compression.ZipFile]::ExtractToDirectory($nativePath, $nativeDirectory, $true)
+                    try {
+                        [IO.Compression.ZipFile]::ExtractToDirectory($nativePath, $nativeDirectory, $true)
+                    } catch {
+                        if (!(Test-Path -LiteralPath $nativeDirectory) -or (Get-ChildItem -LiteralPath $nativeDirectory).Count -eq 0) {
+                            throw $_
+                        }
+                    }
                     $libraries.Remove("native:$key")
                 }
             }

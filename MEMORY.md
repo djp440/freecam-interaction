@@ -1,5 +1,20 @@
 # 项目记忆
 
+- 2026-09-10 16:25：用户完成 Forge 1.7.10 自由视角模式下手持扳手蹲下右键拆除 AE2 ME 线缆/部件及掉落物直入背包实机体验，明确反馈“已成功修复，提交”。据此记录实机验收通过并准备提交；本次提交包含 AE2 拆卸射线同步与平台钩子、PartPlacement 包装拦截与掉落物入包、客户端双击快捷启动批处理及相关自检与文档更新。
+
+- 2026-09-10 15:59：按用户要求启动已安装 IC2/AE2 的 Forge 1.7.10 + lwjgl3ify 3.0.33 开发客户端。客户端自动构建并加载包含 AE2 ME 线缆拆卸与掉落入包修复的最新 Mod JAR，音频引擎启动成功，Java 进程（PID 8428）响应正常，客户端留给用户进行实机体验。
+
+- 2026-09-10 15:57：按用户意图确认要求，解决 Forge 1.7.10 自由视角下手持扳手蹲下拆除 AE2 ME 线缆/部件无响应且掉落物未入包的问题。
+  - 根因：客户端 AE2 线缆拦截原生交互并发送专用 `PacketPartPlacement`；服务端拆除调用 `Platform.getPlayerRay`（从玩家本体眼睛沿朝向 5 格内射线，自由视角下本体脱靶无法命中）及 `Platform.spawnDrops`（脱离原版 `ItemInWorldManager` 掉落包裹）。
+  - 方案实施：新增操作通道 `RAY`（`FreecamActions`）在右键前向 Netty 线程同步当前相机射线；`FreecamTransformer` 定点拦截 `appeng.util.Platform.getPlayerRay` 注入 `FreecamInteraction.customPlayerRay` 反射构造 `LookDirection` 重定向射线；将 `appeng.parts.PartPlacement.place` 改名为原方法并生成包装方法，进入时校验自由视角激活与合法范围并开启 `FreecamDropCollector` 收集上下文，执行后直接将部件与掉落物移入操作者背包、余量安全落地，扣除 1 点法杖耐久；未安装 AE2 时无侵入且无编译期强依赖。
+  - 验证凭据：`scripts/forge1710.ps1 smoke` 通过，含真实 `appliedenergistics2-rv3-beta-6.jar` 字节码补丁注入（`Platform.getPlayerRay` 与 `PartPlacement.place`）、射线缓存与合法范围校验、越界拒绝、掉落物入包结算、法杖耐久扣减以及全部原版/避障检查；`scripts/lwjgl3ify.ps1 smoke` 通过；1.21.1 对应功能保持待实现。
+
+- 2026-09-10 15:20：按用户要求启动已安装 IC2/AE2 的 Forge 1.7.10 + lwjgl3ify 3.0.33 开发客户端。客户端成功加载 17 个 Mod，日志明确包含 `IC2@2.2.828-experimental`、`appliedenergistics2@rv3-beta-6`、`freecam_interaction@0.1.0-forge1710-experiment` 与 `lwjgl3ify@3.0.33`；客户端与集成服务端连接成功且 missing mods 为空，玩家 `FreecamLwjgl3` 已进入“新的世界”。客户端保持运行供用户操作；工具日志 `logs/tools/2026-09-10 15-19-32.log`。
+
+- 2026-09-10 15:18：按用户要求为 Forge 1.7.10 开发客户端安装科技 Mod。依据官方发布信息固定 IC2 `industrialcraft-2-2.2.828-experimental.jar` 与 AE2 `appliedenergistics2-rv3-beta-6.jar`，下载后校验为有效 JAR，内部 `mcmod.info` 确认 Mod ID/版本及 Minecraft 1.7.10。两个文件均已装入原生开发实例 `run/mods` 和 lwjgl3ify 3.0.33 隔离实例 `%LOCALAPPDATA%/GodviewBuild/lwjgl3ify-3.0.33/instance/mods`；新增 `scripts/tech-mods.ps1` 固定官方 CurseForge CDN 地址与 SHA-256，可重复恢复安装。尚未启动客户端验证两者实际加载。
+
+- 2026-09-10 15:12：完成 Forge 1.7.10 自由视角通用交互掉落直接入包。新增 `FreecamDropCollector`，使用线程内可嵌套交互上下文关联同步产生的 `EntityItem`；核心转换器包裹服务端 `ItemInWorldManager.tryHarvestBlock` 与 `activateBlockOrUseItem`，覆盖原版挖掘及第三方 Shift＋右键工具同步拆卸，实体交互、实际攻击与钓鱼复用 `FreecamActions` 原生调用边界。结算仅处理同世界、范围内且确已加入世界的候选；背包按原版堆叠上限合并和填空槽，创造模式满包不吞物品，部分余量原地保留，数量、耐久与 NBT 不变。延迟到后续 tick、绕过物品实体生成、经验球与旧地面物品不推测归属。最终 `scripts/forge1710.ps1 smoke` 通过，含真实 Minecraft 字节码装载验证、成功/异常清理、堆叠/NBT/部分容量/满包及产物类检查，日志 `logs/tools/2026-09-10 15-12-22.log`；`scripts/lwjgl3ify.ps1 smoke` 通过，日志 `logs/tools/2026-09-10 15-11-19.log`。本地实例未发现 IC2 或 AE2 JAR，因此通用路径已验证但 IC2/AE2 实机兼容尚未验证；1.21.1 此功能待实现。
+
 - 2026-09-10 14:44：用户完成 Forge 1.7.10 + lwjgl3ify 游戏内法杖材质验收并明确反馈“验收通过，提交”。普通蓝色、高级红色、创造紫色三张32×32透明贴图确认可在实际道具中正常显示；沿用14:32冒烟构建与14:35真实客户端启动结果，按用户指令提交材质、可复用导出脚本、生成记录及项目记忆。
 
 - 2026-09-10 14:36：按用户要求启动 Forge 1.7.10 + lwjgl3ify 3.0.33 验收实例以检查法杖贴图。首次启动发现隔离实例 `mods` 中残留旧 `godview_build.jar`，它与当前 `freecam_interaction.jar` 同时加载并在旧容器转换器处崩溃；已将该旧JAR可恢复地移动至实例 `disabled-mods/godview_build.jar`，未删除源码或存档。重新启动成功，窗口 `Minecraft 1.7.10` 正常响应，PID 6104；日志 `logs/tools/2026-09-10 14-35-15.log`。客户端留给用户验收。

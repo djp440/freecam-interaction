@@ -68,7 +68,8 @@ try {
                     'local/freecaminteraction/FreecamInteraction.class', 'local/freecaminteraction/core/FreecamLoadingPlugin.class',
                     'local/freecaminteraction/core/FreecamTransformer.class', 'local/freecaminteraction/client/FreecamClient.class',
                     'local/freecaminteraction/item/ItemFreecamWand.class', 'local/freecaminteraction/WandTier.class', 'local/freecaminteraction/FreecamWandRegistry.class',
-                    'local/freecaminteraction/FreecamChunkLoader.class', 'assets/freecam_interaction/lang/zh_CN.lang')) {
+                    'local/freecaminteraction/FreecamChunkLoader.class', 'local/freecaminteraction/FreecamDropCollector.class',
+                    'assets/freecam_interaction/lang/zh_CN.lang')) {
                 if (!$zip.GetEntry($name)) { throw "产物缺少 $name" }
             }
             $reader = [System.IO.StreamReader]::new($zip.GetEntry('mcmod.info').Open(), [System.Text.Encoding]::UTF8)

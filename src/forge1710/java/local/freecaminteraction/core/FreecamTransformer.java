@@ -34,6 +34,15 @@ public final class FreecamTransformer implements IClassTransformer {
         if (transformedName.equals("net.minecraft.item.ItemBucket")) {
             return patchBucketTarget(bytes);
         }
+        if (transformedName.equals("net.minecraft.server.management.ItemInWorldManager")) {
+            return patchBlockInteractions(bytes);
+        }
+        if (transformedName.equals("appeng.util.Platform")) {
+            return patchAe2Platform(bytes);
+        }
+        if (transformedName.equals("appeng.parts.PartPlacement")) {
+            return patchAe2PartPlacement(bytes);
+        }
         boolean vanillaContainer = DISTANCE_CONTAINERS.contains(transformedName);
         if (vanillaContainer || hasContainerMethod(bytes)) return patchContainerDistance(transformedName, bytes, vanillaContainer);
         if (!transformedName.equals("net.minecraft.client.audio.SoundManager")) return bytes;
@@ -55,6 +64,69 @@ public final class FreecamTransformer implements IClassTransformer {
         if (changed != 1) throw new IllegalStateException("Freecam SoundManager patch expected 1 site, got " + changed);
         System.out.println("[Freecam] SoundManager initialization serialized");
         ClassWriter writer = new ClassWriter(0);
+        node.accept(writer);
+        return writer.toByteArray();
+    }
+
+    private byte[] patchBlockInteractions(byte[] bytes) {
+        ClassNode node = new ClassNode();
+        new ClassReader(bytes).accept(node, 0);
+        int changed = 0;
+        for (MethodNode method : new java.util.ArrayList<MethodNode>(node.methods)) {
+            boolean harvest = (method.name.equals("tryHarvestBlock") || method.name.equals("func_73084_b"))
+                    && method.desc.equals("(III)Z");
+            boolean activate = (method.name.equals("activateBlockOrUseItem") || method.name.equals("func_73078_a"))
+                    && method.desc.equals("(Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/world/World;Lnet/minecraft/item/ItemStack;IIIIFFF)Z");
+            if (!harvest && !activate) continue;
+            String originalName = "freecam$original$" + method.name;
+            String wrapperName = method.name;
+            method.name = originalName;
+            MethodNode wrapper = new MethodNode(method.access, wrapperName, method.desc, method.signature,
+                    method.exceptions == null ? null : method.exceptions.toArray(new String[method.exceptions.size()]));
+            Type[] args = Type.getArgumentTypes(method.desc);
+            int tokenLocal = 1;
+            for (Type arg : args) tokenLocal += arg.getSize();
+            int resultLocal = tokenLocal + 1;
+            int errorLocal = resultLocal + 1;
+            LabelNode start = new LabelNode(), finish = new LabelNode(), handler = new LabelNode();
+            InsnList code = wrapper.instructions;
+            code.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            if (activate) code.add(new VarInsnNode(Opcodes.ALOAD, 1)); else code.add(new InsnNode(Opcodes.ACONST_NULL));
+            if (activate) code.add(new VarInsnNode(Opcodes.ALOAD, 2)); else code.add(new InsnNode(Opcodes.ACONST_NULL));
+            int xyz = activate ? 4 : 1;
+            code.add(new VarInsnNode(Opcodes.ILOAD, xyz));
+            code.add(new VarInsnNode(Opcodes.ILOAD, xyz + 1));
+            code.add(new VarInsnNode(Opcodes.ILOAD, xyz + 2));
+            code.add(new LdcInsnNode(harvest ? "break" : "use_block"));
+            code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "local/freecaminteraction/FreecamDropCollector", "beginBlock",
+                    "(Lnet/minecraft/server/management/ItemInWorldManager;Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/world/World;IIILjava/lang/String;)Ljava/lang/Object;", false));
+            code.add(new VarInsnNode(Opcodes.ASTORE, tokenLocal));
+            code.add(start);
+            code.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            int local = 1;
+            for (Type arg : args) { code.add(new VarInsnNode(arg.getOpcode(Opcodes.ILOAD), local)); local += arg.getSize(); }
+            code.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, node.name, originalName, method.desc, false));
+            code.add(new VarInsnNode(Opcodes.ISTORE, resultLocal));
+            code.add(new VarInsnNode(Opcodes.ALOAD, tokenLocal));
+            code.add(new InsnNode(Opcodes.ICONST_1));
+            code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "local/freecaminteraction/FreecamDropCollector", "end", "(Ljava/lang/Object;Z)V", false));
+            code.add(new VarInsnNode(Opcodes.ILOAD, resultLocal));
+            code.add(new InsnNode(Opcodes.IRETURN));
+            code.add(finish);
+            code.add(handler);
+            code.add(new VarInsnNode(Opcodes.ASTORE, errorLocal));
+            code.add(new VarInsnNode(Opcodes.ALOAD, tokenLocal));
+            code.add(new InsnNode(Opcodes.ICONST_0));
+            code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "local/freecaminteraction/FreecamDropCollector", "end", "(Ljava/lang/Object;Z)V", false));
+            code.add(new VarInsnNode(Opcodes.ALOAD, errorLocal));
+            code.add(new InsnNode(Opcodes.ATHROW));
+            wrapper.tryCatchBlocks.add(new TryCatchBlockNode(start, finish, handler, null));
+            node.methods.add(wrapper);
+            changed++;
+        }
+        if (changed != 2) throw new IllegalStateException("Freecam block interaction patch expected 2 methods, got " + changed);
+        System.out.println("[Freecam] ItemInWorldManager drop contexts patched");
+        ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
         node.accept(writer);
         return writer.toByteArray();
     }
@@ -205,6 +277,117 @@ public final class FreecamTransformer implements IClassTransformer {
         entityRendererPatched = true;
         System.out.println("[Freecam] EntityRenderer orientCamera rayTrace patched");
         ClassWriter writer = new ClassWriter(0);
+        node.accept(writer);
+        return writer.toByteArray();
+    }
+
+    private byte[] patchAe2Platform(byte[] bytes) {
+        ClassNode node = new ClassNode();
+        new ClassReader(bytes).accept(node, 0);
+        int changed = 0;
+        for (MethodNode method : node.methods) {
+            if (!method.name.equals("getPlayerRay")) continue;
+            if (!method.desc.equals("(Lnet/minecraft/entity/player/EntityPlayer;F)Lappeng/util/LookDirection;")) continue;
+            LabelNode skip = new LabelNode();
+            InsnList hook = new InsnList();
+            hook.add(new VarInsnNode(Opcodes.ALOAD, 0));
+            hook.add(new VarInsnNode(Opcodes.FLOAD, 1));
+            hook.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "local/freecaminteraction/FreecamInteraction", "customPlayerRay",
+                    "(Lnet/minecraft/entity/player/EntityPlayer;F)Ljava/lang/Object;", false));
+            hook.add(new InsnNode(Opcodes.DUP));
+            hook.add(new JumpInsnNode(Opcodes.IFNULL, skip));
+            hook.add(new TypeInsnNode(Opcodes.CHECKCAST, "appeng/util/LookDirection"));
+            hook.add(new InsnNode(Opcodes.ARETURN));
+            hook.add(skip);
+            hook.add(new InsnNode(Opcodes.POP));
+            method.instructions.insert(hook);
+            changed++;
+        }
+        if (changed != 1) throw new IllegalStateException("Freecam AE2 Platform patch expected 1 site, got " + changed);
+        System.out.println("[Freecam] AE2 Platform getPlayerRay patched");
+        ClassWriter writer = new ClassWriter(0);
+        node.accept(writer);
+        return writer.toByteArray();
+    }
+
+    private byte[] patchAe2PartPlacement(byte[] bytes) {
+        ClassNode node = new ClassNode();
+        new ClassReader(bytes).accept(node, 0);
+        int changed = 0;
+        for (MethodNode method : new java.util.ArrayList<MethodNode>(node.methods)) {
+            if (!method.name.equals("place")) continue;
+            if (!method.desc.equals("(Lnet/minecraft/item/ItemStack;IIIILnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/world/World;Lappeng/parts/PartPlacement$PlaceType;I)Z")) continue;
+            String originalName = "freecam$original$" + method.name;
+            String wrapperName = method.name;
+            method.name = originalName;
+            MethodNode wrapper = new MethodNode(method.access, wrapperName, method.desc, method.signature,
+                    method.exceptions == null ? null : method.exceptions.toArray(new String[method.exceptions.size()]));
+            Type[] args = Type.getArgumentTypes(method.desc);
+            int tokenLocal = 0;
+            for (Type arg : args) tokenLocal += arg.getSize();
+            int resultLocal = tokenLocal + 1;
+            int errorLocal = resultLocal + 1;
+
+            LabelNode proceed = new LabelNode();
+            LabelNode start = new LabelNode(), finish = new LabelNode(), handler = new LabelNode();
+            InsnList code = wrapper.instructions;
+
+            code.add(new VarInsnNode(Opcodes.ALOAD, 5));
+            code.add(new VarInsnNode(Opcodes.ALOAD, 6));
+            code.add(new VarInsnNode(Opcodes.ILOAD, 1));
+            code.add(new VarInsnNode(Opcodes.ILOAD, 2));
+            code.add(new VarInsnNode(Opcodes.ILOAD, 3));
+            code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "local/freecaminteraction/FreecamInteraction", "beginAe2Placement",
+                    "(Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/world/World;III)Ljava/lang/Object;", false));
+            code.add(new VarInsnNode(Opcodes.ASTORE, tokenLocal));
+
+            code.add(new VarInsnNode(Opcodes.ALOAD, tokenLocal));
+            code.add(new FieldInsnNode(Opcodes.GETSTATIC, "java/lang/Boolean", "FALSE", "Ljava/lang/Boolean;"));
+            code.add(new JumpInsnNode(Opcodes.IF_ACMPNE, proceed));
+            code.add(new InsnNode(Opcodes.ICONST_0));
+            code.add(new InsnNode(Opcodes.IRETURN));
+
+            code.add(proceed);
+            code.add(start);
+            int local = 0;
+            for (Type arg : args) { code.add(new VarInsnNode(arg.getOpcode(Opcodes.ILOAD), local)); local += arg.getSize(); }
+            code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, node.name, originalName, method.desc, false));
+            code.add(new VarInsnNode(Opcodes.ISTORE, resultLocal));
+            code.add(new VarInsnNode(Opcodes.ALOAD, tokenLocal));
+            code.add(new VarInsnNode(Opcodes.ALOAD, 5));
+            code.add(new VarInsnNode(Opcodes.ILOAD, resultLocal));
+            code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "local/freecaminteraction/FreecamInteraction", "endAe2Placement",
+                    "(Ljava/lang/Object;Lnet/minecraft/entity/player/EntityPlayer;Z)V", false));
+            code.add(new VarInsnNode(Opcodes.ILOAD, resultLocal));
+            code.add(new InsnNode(Opcodes.IRETURN));
+            code.add(finish);
+
+            code.add(handler);
+            code.add(new VarInsnNode(Opcodes.ASTORE, errorLocal));
+            code.add(new VarInsnNode(Opcodes.ALOAD, tokenLocal));
+            code.add(new VarInsnNode(Opcodes.ALOAD, 5));
+            code.add(new InsnNode(Opcodes.ICONST_0));
+            code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "local/freecaminteraction/FreecamInteraction", "endAe2Placement",
+                    "(Ljava/lang/Object;Lnet/minecraft/entity/player/EntityPlayer;Z)V", false));
+            code.add(new VarInsnNode(Opcodes.ALOAD, errorLocal));
+            code.add(new InsnNode(Opcodes.ATHROW));
+
+            wrapper.tryCatchBlocks.add(new TryCatchBlockNode(start, finish, handler, null));
+            node.methods.add(wrapper);
+            changed++;
+        }
+        if (changed != 1) throw new IllegalStateException("Freecam AE2 PartPlacement patch expected 1 site, got " + changed);
+        System.out.println("[Freecam] AE2 PartPlacement place patched");
+        ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS) {
+            @Override
+            protected String getCommonSuperClass(String type1, String type2) {
+                try {
+                    return super.getCommonSuperClass(type1, type2);
+                } catch (Throwable t) {
+                    return "java/lang/Object";
+                }
+            }
+        };
         node.accept(writer);
         return writer.toByteArray();
     }

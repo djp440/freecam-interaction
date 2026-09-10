@@ -32,7 +32,7 @@ import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 
 /** 网络线程只保存一条待处理操作；游戏线程复核并调用原生实体/物品入口，并在动作成功后扣除法杖耐久。 */
 public final class FreecamActions {
-    public static final int ATTACK = 0, INTERACT = 1, FISH = 2, USE_BUCKET = 3;
+    public static final int ATTACK = 0, INTERACT = 1, FISH = 2, USE_BUCKET = 3, RAY = 4;
     private static final Map<EntityPlayerMP, Action> PENDING = new ConcurrentHashMap<EntityPlayerMP, Action>();
     private static final Field BUCKET_CONTENT = ReflectionHelper.findField(ItemBucket.class, "isFull", "field_77876_a");
     private static final Map<EntityPlayerMP, long[]> LAST = new WeakHashMap<EntityPlayerMP, long[]>();
@@ -48,6 +48,11 @@ public final class FreecamActions {
     }
 
     public static void send(Action action) { channel.sendToServer(action); }
+    public static void sendRay(Vec3 start, Vec3 end, Vec3 point) {
+        if (start != null && end != null && point != null) {
+            send(new Action(RAY, 0, 0, start, end, point));
+        }
+    }
     public static void clear(EntityPlayerMP player) { PENDING.remove(player); LAST.remove(player); }
 
     public static boolean emptyBucket(ItemStack stack) {
@@ -79,6 +84,10 @@ public final class FreecamActions {
 
     public static final class Handler implements IMessageHandler<Action, IMessage> {
         public IMessage onMessage(Action message, MessageContext context) {
+            if (message.kind == RAY) {
+                FreecamInteraction.recordRay(context.getServerHandler().playerEntity, message.start, message.end, message.point);
+                return null;
+            }
             PENDING.put(context.getServerHandler().playerEntity, message);
             return null;
         }
@@ -146,8 +155,14 @@ public final class FreecamActions {
         } else if (action.kind == FISH) {
             if (!rod) { reject(player, "not_fishing_rod"); return; }
             fishing = true;
+            Entity dropOrigin = retrieve ? player.fishEntity : hit == null ? null : hit.entityHit;
+            double dropX = dropOrigin == null ? hit.hitVec.xCoord : dropOrigin.posX;
+            double dropY = dropOrigin == null ? hit.hitVec.yCoord : dropOrigin.posY;
+            double dropZ = dropOrigin == null ? hit.hitVec.zCoord : dropOrigin.posZ;
+            Object drops = FreecamDropCollector.begin(player, player.worldObj, dropX, dropY, dropZ, "fish");
             float yaw = player.rotationYaw, pitch = player.rotationPitch;
             boolean success = false;
+            boolean completed = false;
             try {
                 if (!retrieve) {
                     double x = hit.hitVec.xCoord - player.posX;
@@ -162,7 +177,11 @@ public final class FreecamActions {
                 if (!event.isCanceled() && event.useItem != cpw.mods.fml.common.eventhandler.Event.Result.DENY) {
                     success = player.theItemInWorldManager.tryUseItem(player, player.worldObj, item);
                 }
-            } finally { player.rotationYaw = yaw; player.rotationPitch = pitch; fishing = false; }
+                completed = true;
+            } finally {
+                player.rotationYaw = yaw; player.rotationPitch = pitch; fishing = false;
+                FreecamDropCollector.end(drops, completed);
+            }
             if (success) {
                 FreecamInteraction.deductUsage(player);
             }
@@ -170,7 +189,11 @@ public final class FreecamActions {
             EntityLivingBase living = (EntityLivingBase) hit.entityHit;
             WorldServer ws = (WorldServer) player.worldObj;
             if (action.kind == INTERACT) {
-                boolean done = player.interactWith(living);
+                Object drops = FreecamDropCollector.begin(player, player.worldObj, living.posX, living.posY, living.posZ, "interact_entity");
+                boolean done = false;
+                boolean completed = false;
+                try { done = player.interactWith(living); completed = true; }
+                finally { FreecamDropCollector.end(drops, completed); }
                 ModLog.info("Entity interaction; player=" + player.getCommandSenderName() + "; target=" + living.getEntityId()
                         + "; handled=" + done + "; distanceSq=" + player.getDistanceSqToEntity(living)
                         + "; container=" + player.openContainer.getClass().getSimpleName());
@@ -187,21 +210,24 @@ public final class FreecamActions {
                 double z = Math.max(living.boundingBox.minZ, Math.min(player.posZ, living.boundingBox.maxZ));
                 double reach = player.capabilities.isCreativeMode ? 6 : 3;
                 Vec3 eye = Vec3.createVectorHelper(player.posX, player.posY + player.getEyeHeight(), player.posZ);
+                Object drops = FreecamDropCollector.begin(player, player.worldObj, living.posX, living.posY, living.posZ, "attack_entity");
                 boolean attacked = false;
-                if (eye.squareDistanceTo(Vec3.createVectorHelper(x, y, z)) < reach * reach && player.canEntityBeSeen(living)) {
-                    player.attackTargetEntityWithCurrentItem(living);
-                    attacked = true;
-                } else if (!living.isEntityInvulnerable() && living.canAttackWithItem() && living.hurtTime == 0
-                        && !MinecraftForge.EVENT_BUS.post(new AttackEntityEvent(player, living))) {
-                    double dx = player.posX - living.posX, dz = player.posZ - living.posZ;
-                    if (dx * dx + dz * dz < 1.0e-8) { dx = 0.01; dz = 0; }
-                    living.knockBack(player, 0, dx, dz);
-                    living.velocityChanged = true;
-                    living.hurtTime = living.maxHurtTime = 10;
-                    ws.getEntityTracker().func_151248_b(living, new S12PacketEntityVelocity(living));
-                    ws.getEntityTracker().func_151248_b(living, new S19PacketEntityStatus(living, (byte) 2));
-                    attacked = true;
-                }
+                try {
+                    if (eye.squareDistanceTo(Vec3.createVectorHelper(x, y, z)) < reach * reach && player.canEntityBeSeen(living)) {
+                        player.attackTargetEntityWithCurrentItem(living);
+                        attacked = true;
+                    } else if (!living.isEntityInvulnerable() && living.canAttackWithItem() && living.hurtTime == 0
+                            && !MinecraftForge.EVENT_BUS.post(new AttackEntityEvent(player, living))) {
+                        double dx = player.posX - living.posX, dz = player.posZ - living.posZ;
+                        if (dx * dx + dz * dz < 1.0e-8) { dx = 0.01; dz = 0; }
+                        living.knockBack(player, 0, dx, dz);
+                        living.velocityChanged = true;
+                        living.hurtTime = living.maxHurtTime = 10;
+                        ws.getEntityTracker().func_151248_b(living, new S12PacketEntityVelocity(living));
+                        ws.getEntityTracker().func_151248_b(living, new S19PacketEntityStatus(living, (byte) 2));
+                        attacked = true;
+                    }
+                } finally { FreecamDropCollector.end(drops, attacked); }
                 if (attacked) {
                     player.swingItem();
                     ws.getEntityTracker().func_151248_b(player, new S0BPacketAnimation(player, 0));

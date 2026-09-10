@@ -6,6 +6,10 @@ import local.freecaminteraction.FreecamRange;
 import net.minecraft.util.Vec3;
 
 public class LegacyActionCheck {
+    private static final class ByteLoader extends ClassLoader {
+        ByteLoader() { super(LegacyActionCheck.class.getClassLoader()); }
+        Class define(byte[] bytes) { return defineClass(null, bytes, 0, bytes.length); }
+    }
     // 仅测试用：跳过世界/实体构造，不启动游戏、不读取存档；射线算法仍调用真实 World 实现。
     public static class RayWorld extends net.minecraft.world.World {
         java.util.List entities;
@@ -26,6 +30,7 @@ public class LegacyActionCheck {
         public int getBlockMetadata(int x, int y, int z) { return 0; }
         public java.util.List getEntitiesWithinAABBExcludingEntity(net.minecraft.entity.Entity e, net.minecraft.util.AxisAlignedBB b) { return entities; }
         public boolean blockExists(int x, int y, int z) { return true; }
+        public int getHeight() { return 256; }
     }
     public static class Target extends net.minecraft.entity.passive.EntityCow {
         Target() { super(null); }
@@ -45,6 +50,10 @@ public class LegacyActionCheck {
             return getMaterial().isSolid() ? net.minecraft.util.AxisAlignedBB.getBoundingBox(x, y, z, x + 1, y + 1, z + 1) : null;
         }
     }
+    public static class DummyContainer extends net.minecraft.inventory.Container {
+        public boolean canInteractWith(net.minecraft.entity.player.EntityPlayer p) { return true; }
+        public void detectAndSendChanges() {}
+    }
     private static void rayChecks() throws Exception {
         java.lang.reflect.Field field = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
         field.setAccessible(true);
@@ -55,11 +64,10 @@ public class LegacyActionCheck {
         net.minecraft.entity.player.EntityPlayerMP player = (net.minecraft.entity.player.EntityPlayerMP) unsafe.allocateInstance(net.minecraft.entity.player.EntityPlayerMP.class);
         player.worldObj = world;
         java.lang.reflect.Field bounds = net.minecraft.entity.Entity.class.getField("boundingBox");
-        bounds.setAccessible(true);
-        bounds.set(player, net.minecraft.util.AxisAlignedBB.getBoundingBox(0, 0, 0, 1, 2, 1));
+        unsafe.putObject(player, unsafe.objectFieldOffset(bounds), net.minecraft.util.AxisAlignedBB.getBoundingBox(0, 0, 0, 1, 2, 1));
         Target entity = (Target) unsafe.allocateInstance(Target.class);
         entity.worldObj = world;
-        bounds.set(entity, net.minecraft.util.AxisAlignedBB.getBoundingBox(5, 0, 0, 6, 2, 1));
+        unsafe.putObject(entity, unsafe.objectFieldOffset(bounds), net.minecraft.util.AxisAlignedBB.getBoundingBox(5, 0, 0, 6, 2, 1));
         world.entities = java.util.Collections.singletonList(entity);
         world.wall = 7;
         Vec3 start = Vec3.createVectorHelper(0, 1, 0.5), end = Vec3.createVectorHelper(10, 1, 0.5);
@@ -143,6 +151,69 @@ public class LegacyActionCheck {
         }
         assert calls == 1 : "EntityRenderer cameraRayTrace hook missing";
         System.out.println("EntityRenderer patch check passed (real Minecraft bytecode).");
+    }
+
+    private static void dropPatchCheck() throws Exception {
+        String name = "net.minecraft.server.management.ItemInWorldManager";
+        java.io.InputStream stream = LegacyActionCheck.class.getResourceAsStream("/" + name.replace('.', '/') + ".class");
+        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+        try {
+            byte[] buffer = new byte[4096];
+            for (int count; (count = stream.read(buffer)) != -1;) bytes.write(buffer, 0, count);
+        } finally { stream.close(); }
+        byte[] patched = new local.freecaminteraction.core.FreecamTransformer().transform(name, name, bytes.toByteArray());
+        Class verified = new ByteLoader().define(patched);
+        assert verified.getDeclaredMethod("tryHarvestBlock", Integer.TYPE, Integer.TYPE, Integer.TYPE) != null;
+        org.objectweb.asm.tree.ClassNode node = new org.objectweb.asm.tree.ClassNode();
+        new org.objectweb.asm.ClassReader(patched).accept(node, 0);
+        int begin = 0, end = 0, originals = 0;
+        for (org.objectweb.asm.tree.MethodNode method : node.methods) {
+            if (method.name.startsWith("freecam$original$")) originals++;
+            for (org.objectweb.asm.tree.AbstractInsnNode instruction : method.instructions.toArray()) {
+                if (!(instruction instanceof org.objectweb.asm.tree.MethodInsnNode)) continue;
+                String call = ((org.objectweb.asm.tree.MethodInsnNode) instruction).name;
+                if (call.equals("beginBlock")) begin++;
+                if (call.equals("end")) end++;
+            }
+        }
+        assert originals == 2 && begin == 2 && end == 4 : "方块交互掉落上下文补丁不完整";
+        System.out.println("Drop context patch check passed (harvest/use, success/exception cleanup).");
+    }
+
+    private static void dropInventoryCheck() throws Exception {
+        java.lang.reflect.Field field = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+        field.setAccessible(true);
+        sun.misc.Unsafe unsafe = (sun.misc.Unsafe) field.get(null);
+        net.minecraft.entity.player.EntityPlayerMP player = (net.minecraft.entity.player.EntityPlayerMP) unsafe.allocateInstance(net.minecraft.entity.player.EntityPlayerMP.class);
+        player.inventory = new net.minecraft.entity.player.InventoryPlayer(player);
+        java.lang.reflect.Method insert = local.freecaminteraction.FreecamDropCollector.class
+                .getDeclaredMethod("insert", net.minecraft.entity.player.EntityPlayerMP.class, net.minecraft.item.ItemStack.class);
+        insert.setAccessible(true);
+
+        net.minecraft.item.Item testedItem = new net.minecraft.item.Item().setMaxStackSize(64);
+        net.minecraft.item.Item filler = new net.minecraft.item.Item().setMaxStackSize(64);
+        net.minecraft.item.ItemStack existing = new net.minecraft.item.ItemStack(testedItem, 60);
+        net.minecraft.nbt.NBTTagCompound tag = new net.minecraft.nbt.NBTTagCompound();
+        tag.setString("machine", "preserved");
+        existing.setTagCompound((net.minecraft.nbt.NBTTagCompound) tag.copy());
+        player.inventory.mainInventory[0] = existing;
+        net.minecraft.item.ItemStack incoming = new net.minecraft.item.ItemStack(testedItem, 10);
+        incoming.setTagCompound((net.minecraft.nbt.NBTTagCompound) tag.copy());
+        int moved = ((Integer) insert.invoke(null, player, incoming)).intValue();
+        assert moved == 10 && incoming.stackSize == 0 : "moved=" + moved + ", remaining=" + incoming.stackSize
+                + ", slot0=" + player.inventory.mainInventory[0].stackSize;
+        assert player.inventory.mainInventory[0].stackSize == 64;
+        assert player.inventory.mainInventory[1].stackSize == 6;
+        assert "preserved".equals(player.inventory.mainInventory[1].getTagCompound().getString("machine"));
+
+        for (int i = 0; i < 36; i++) player.inventory.mainInventory[i] = new net.minecraft.item.ItemStack(filler, 64);
+        player.inventory.mainInventory[0] = new net.minecraft.item.ItemStack(testedItem, 63);
+        incoming = new net.minecraft.item.ItemStack(testedItem, 5);
+        moved = ((Integer) insert.invoke(null, player, incoming)).intValue();
+        assert moved == 1 && incoming.stackSize == 4 : "部分容量必须保留落地余量";
+        moved = ((Integer) insert.invoke(null, player, incoming)).intValue();
+        assert moved == 0 && incoming.stackSize == 4 : "满包不得吞物品";
+        System.out.println("Drop inventory checks passed: merge, NBT, partial capacity, full inventory.");
     }
 
     private static void reproductionAndCollisionCheck() throws Exception {
@@ -245,12 +316,134 @@ public class LegacyActionCheck {
         System.out.println("FreecamCollision checks passed: zero-jump reproduction fix, wall sliding, rotation arc stop, liquid surface floor.");
     }
 
+    private static void ae2PatchCheck() throws Exception {
+        java.io.File jarFile = new java.io.File("run/mods/appliedenergistics2-rv3-beta-6.jar");
+        if (!jarFile.exists()) {
+            System.out.println("AE2 jar not present in run/mods, skipping AE2 bytecode patch verification.");
+            return;
+        }
+        java.util.jar.JarFile jar = new java.util.jar.JarFile(jarFile);
+        try {
+            java.util.zip.ZipEntry entry = jar.getEntry("appeng/util/Platform.class");
+            assert entry != null : "Platform.class entry missing in AE2 jar";
+            java.io.InputStream stream = jar.getInputStream(entry);
+            java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+            try {
+                byte[] buf = new byte[4096];
+                for (int c; (c = stream.read(buf)) != -1;) bytes.write(buf, 0, c);
+            } finally { stream.close(); }
+            byte[] patched = new local.freecaminteraction.core.FreecamTransformer().transform("appeng.util.Platform", "appeng.util.Platform", bytes.toByteArray());
+            org.objectweb.asm.tree.ClassNode node = new org.objectweb.asm.tree.ClassNode();
+            new org.objectweb.asm.ClassReader(patched).accept(node, 0);
+            int customRayCalls = 0;
+            for (org.objectweb.asm.tree.MethodNode method : node.methods) {
+                if (method.name.equals("getPlayerRay")) {
+                    for (org.objectweb.asm.tree.AbstractInsnNode insn : method.instructions.toArray()) {
+                        if (insn instanceof org.objectweb.asm.tree.MethodInsnNode) {
+                            org.objectweb.asm.tree.MethodInsnNode m = (org.objectweb.asm.tree.MethodInsnNode) insn;
+                            if (m.name.equals("customPlayerRay")) customRayCalls++;
+                        }
+                    }
+                }
+            }
+            assert customRayCalls == 1 : "Platform getPlayerRay hook missing";
+
+            entry = jar.getEntry("appeng/parts/PartPlacement.class");
+            assert entry != null : "PartPlacement.class entry missing in AE2 jar";
+            stream = jar.getInputStream(entry);
+            bytes = new java.io.ByteArrayOutputStream();
+            try {
+                byte[] buf = new byte[4096];
+                for (int c; (c = stream.read(buf)) != -1;) bytes.write(buf, 0, c);
+            } finally { stream.close(); }
+            patched = new local.freecaminteraction.core.FreecamTransformer().transform("appeng.parts.PartPlacement", "appeng.parts.PartPlacement", bytes.toByteArray());
+            node = new org.objectweb.asm.tree.ClassNode();
+            new org.objectweb.asm.ClassReader(patched).accept(node, 0);
+            int originalPlace = 0, beginAe2 = 0, endAe2 = 0;
+            for (org.objectweb.asm.tree.MethodNode method : node.methods) {
+                if (method.name.equals("freecam$original$place")) originalPlace++;
+                for (org.objectweb.asm.tree.AbstractInsnNode insn : method.instructions.toArray()) {
+                    if (insn instanceof org.objectweb.asm.tree.MethodInsnNode) {
+                        org.objectweb.asm.tree.MethodInsnNode m = (org.objectweb.asm.tree.MethodInsnNode) insn;
+                        if (m.name.equals("beginAe2Placement")) beginAe2++;
+                        if (m.name.equals("endAe2Placement")) endAe2++;
+                    }
+                }
+            }
+            assert originalPlace == 1 && beginAe2 == 1 && endAe2 == 2 : "PartPlacement place wrapper incomplete";
+            System.out.println("AE2 bytecode patch check passed (Platform.getPlayerRay & PartPlacement.place).");
+        } finally {
+            jar.close();
+        }
+    }
+
+    private static void ae2RayAndContextCheck() throws Exception {
+        java.lang.reflect.Field field = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+        field.setAccessible(true);
+        sun.misc.Unsafe unsafe = (sun.misc.Unsafe) field.get(null);
+        net.minecraft.entity.player.EntityPlayerMP player = (net.minecraft.entity.player.EntityPlayerMP) unsafe.allocateInstance(net.minecraft.entity.player.EntityPlayerMP.class);
+        player.worldObj = (RayWorld) unsafe.allocateInstance(RayWorld.class);
+        java.lang.reflect.Field bounds = net.minecraft.entity.Entity.class.getField("boundingBox");
+        unsafe.putObject(player, unsafe.objectFieldOffset(bounds), net.minecraft.util.AxisAlignedBB.getBoundingBox(0, 60, 0, 1, 62, 1));
+        net.minecraft.entity.DataWatcher dw = new net.minecraft.entity.DataWatcher(player);
+        dw.addObject(6, Float.valueOf(20.0F));
+        java.lang.reflect.Field dwField = net.minecraft.entity.Entity.class.getDeclaredField("dataWatcher");
+        dwField.setAccessible(true);
+        dwField.set(player, dw);
+        for (java.lang.reflect.Field f : net.minecraft.entity.player.EntityPlayer.class.getDeclaredFields()) {
+            if (f.getType().getName().contains("GameProfile")) {
+                unsafe.putObject(player, unsafe.objectFieldOffset(f), new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), "Ae2Tester"));
+                break;
+            }
+        }
+        player.inventory = new net.minecraft.entity.player.InventoryPlayer(player);
+        player.inventoryContainer = new DummyContainer();
+        local.freecaminteraction.item.ItemFreecamWand wandNorm = new local.freecaminteraction.item.ItemFreecamWand(local.freecaminteraction.WandTier.NORMAL);
+        player.inventory.mainInventory[0] = new net.minecraft.item.ItemStack(wandNorm, 1, 100);
+        player.posX = 0.5; player.posZ = 0.5;
+
+        assert local.freecaminteraction.FreecamInteraction.customPlayerRay(player, 1.62F) == null;
+        assert local.freecaminteraction.FreecamInteraction.beginAe2Placement(player, player.worldObj, 5, 60, 5) == null;
+
+        java.lang.reflect.Field activeField = local.freecaminteraction.FreecamInteraction.class.getDeclaredField("ACTIVE");
+        activeField.setAccessible(true);
+        java.util.Map activeMap = (java.util.Map) activeField.get(null);
+        java.lang.reflect.Constructor stateCtor = Class.forName("local.freecaminteraction.FreecamInteraction$State")
+                .getDeclaredConstructors()[0];
+        stateCtor.setAccessible(true);
+        Object state = stateCtor.newInstance(player.dimension, 5.0D, local.freecaminteraction.WandTier.NORMAL, 0, null);
+        activeMap.put(player, state);
+
+        try {
+            Vec3 start = Vec3.createVectorHelper(0.5, 65.0, 0.5);
+            Vec3 end = Vec3.createVectorHelper(5.5, 60.5, 5.5);
+            Vec3 point = Vec3.createVectorHelper(5.0, 60.5, 5.0);
+            local.freecaminteraction.FreecamInteraction.recordRay(player, start, end, point);
+
+            assert local.freecaminteraction.FreecamInteraction.beginAe2Placement(player, player.worldObj, 500, 60, 500) == Boolean.FALSE;
+
+            Object token = local.freecaminteraction.FreecamInteraction.beginAe2Placement(player, player.worldObj, 5, 60, 5);
+            assert token != null && token != Boolean.FALSE : "有效范围应开启掉落上下文";
+
+            local.freecaminteraction.FreecamInteraction.endAe2Placement(token, player, true);
+
+            System.out.println("AE2 ray and placement context checks passed: active guard, out-of-bounds rejection, valid context & cleanup.");
+        } finally {
+            activeMap.remove(player);
+            local.freecaminteraction.FreecamInteraction.consumeRay(player);
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         rayChecks();
         bucketPatchCheck();
         tradePatchCheck();
         rendererPatchCheck();
+        dropPatchCheck();
+        dropInventoryCheck();
         reproductionAndCollisionCheck();
+        ae2PatchCheck();
+        ae2RayAndContextCheck();
         Vec3 start = Vec3.createVectorHelper(1, 2, 3), end = Vec3.createVectorHelper(-4, 5, 6);
         ByteBuf bytes = Unpooled.buffer();
         try {

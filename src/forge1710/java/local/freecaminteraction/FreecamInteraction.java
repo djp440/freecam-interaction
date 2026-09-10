@@ -34,6 +34,7 @@ public final class FreecamInteraction {
     private static volatile int clientEpoch;
     private static final Map<EntityPlayerMP, ModeRequest> PENDING = new ConcurrentHashMap<EntityPlayerMP, ModeRequest>();
     private static final Map<EntityPlayerMP, State> ACTIVE = new HashMap<EntityPlayerMP, State>();
+    private static final Map<EntityPlayerMP, RayRecord> RAYS = new ConcurrentHashMap<EntityPlayerMP, RayRecord>();
 
     public static void initialize() {
         channel = NetworkRegistry.INSTANCE.newSimpleChannel("freecam1710v2");
@@ -43,6 +44,7 @@ public final class FreecamInteraction {
         FreecamInteraction events = new FreecamInteraction();
         FMLCommonHandler.instance().bus().register(events);
         MinecraftForge.EVENT_BUS.register(events);
+        MinecraftForge.EVENT_BUS.register(new FreecamDropCollector());
     }
 
     public static void request(boolean enabled) {
@@ -127,6 +129,7 @@ public final class FreecamInteraction {
     public static void clear(EntityPlayerMP player) {
         PENDING.remove(player);
         FreecamActions.clear(player);
+        consumeRay(player);
         State state = ACTIVE.remove(player);
         cancelMining(player);
         if (state != null) {
@@ -413,5 +416,70 @@ public final class FreecamInteraction {
             }
             return null;
         }
+    }
+
+    public static final class RayRecord {
+        public final net.minecraft.util.Vec3 start, end, point;
+        public final long timestamp;
+
+        public RayRecord(net.minecraft.util.Vec3 start, net.minecraft.util.Vec3 end, net.minecraft.util.Vec3 point, long timestamp) {
+            this.start = start;
+            this.end = end;
+            this.point = point;
+            this.timestamp = timestamp;
+        }
+    }
+
+    public static void recordRay(EntityPlayerMP player, net.minecraft.util.Vec3 start, net.minecraft.util.Vec3 end, net.minecraft.util.Vec3 point) {
+        if (player == null || !active(player)) return;
+        if (!FreecamTarget.finite(start) || !FreecamTarget.finite(end) || !FreecamTarget.finite(point)) return;
+        WandTier tier = getActiveTier(player);
+        double cameraBound = Math.sqrt(3) * FreecamRange.cameraReach(tier) + 16;
+        net.minecraft.util.Vec3 playerPos = net.minecraft.util.Vec3.createVectorHelper(player.posX, player.boundingBox.minY, player.posZ);
+        if (start.squareDistanceTo(playerPos) > cameraBound * cameraBound) return;
+        RAYS.put(player, new RayRecord(start, end, point, System.currentTimeMillis()));
+    }
+
+    public static void consumeRay(EntityPlayerMP player) {
+        if (player != null) RAYS.remove(player);
+    }
+
+    public static Object customPlayerRay(EntityPlayer player, float eyeOffset) {
+        if (!(player instanceof EntityPlayerMP) || !active(player)) return null;
+        RayRecord ray = RAYS.get(player);
+        if (ray == null) return null;
+        if (System.currentTimeMillis() - ray.timestamp > 1500L) {
+            RAYS.remove(player);
+            return null;
+        }
+        try {
+            Class<?> clazz = Class.forName("appeng.util.LookDirection", false, player.getClass().getClassLoader());
+            return clazz.getConstructor(net.minecraft.util.Vec3.class, net.minecraft.util.Vec3.class).newInstance(ray.start, ray.end);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    public static Object beginAe2Placement(EntityPlayer player, net.minecraft.world.World world, int x, int y, int z) {
+        if (!(player instanceof EntityPlayerMP) || !active(player)) return null;
+        EntityPlayerMP mp = (EntityPlayerMP) player;
+        if (!inside(mp, x, y, z)) return Boolean.FALSE;
+        return FreecamDropCollector.begin(mp, world, x, y, z, "ae2_part");
+    }
+
+    public static void endAe2Placement(Object token, EntityPlayer player, boolean success) {
+        if (token != null && !(token instanceof Boolean)) {
+            FreecamDropCollector.end(token, success);
+        }
+        if (success && player instanceof EntityPlayerMP && active(player)) {
+            deductUsage((EntityPlayerMP) player);
+            consumeRay((EntityPlayerMP) player);
+        }
+    }
+
+    private static String playerName(EntityPlayer player) {
+        if (player == null) return "unknown";
+        try { return player.getCommandSenderName() != null ? player.getCommandSenderName() : "unknown"; }
+        catch (Throwable ignored) { return "unknown"; }
     }
 }
