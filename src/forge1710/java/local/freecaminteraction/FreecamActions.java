@@ -11,6 +11,7 @@ import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
+import local.freecaminteraction.WandTier;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.player.EntityPlayer;
@@ -29,7 +30,7 @@ import net.minecraftforge.event.ForgeEventFactory;
 import net.minecraftforge.event.entity.player.AttackEntityEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 
-/** 网络线程只保存一条待处理操作；游戏线程复核并调用原生实体/物品入口。 */
+/** 网络线程只保存一条待处理操作；游戏线程复核并调用原生实体/物品入口，并在动作成功后扣除法杖耐久。 */
 public final class FreecamActions {
     public static final int ATTACK = 0, INTERACT = 1, FISH = 2, USE_BUCKET = 3;
     private static final Map<EntityPlayerMP, Action> PENDING = new ConcurrentHashMap<EntityPlayerMP, Action>();
@@ -112,7 +113,8 @@ public final class FreecamActions {
         MovingObjectPosition hit = null;
 
         if (!retrieve) {
-            double cameraBound = Math.sqrt(3) * FreecamRange.cameraReach() + 16;
+            WandTier tier = FreecamInteraction.getActiveTier(player);
+            double cameraBound = Math.sqrt(3) * FreecamRange.cameraReach(tier) + 16;
             if (action.start.squareDistanceTo(Vec3.createVectorHelper(player.posX, player.boundingBox.minY, player.posZ)) > cameraBound * cameraBound) {
                 reject(player, "camera"); return;
             }
@@ -129,19 +131,23 @@ public final class FreecamActions {
             } else {
                 hit = FreecamTarget.pick(player, action.start, action.end);
                 if (hit == null) { reject(player, "no_target"); return; }
-                // 不信任客户端实体 ID/命中点，也不把已移动或被遮挡的目标替换成另一个生物。
                 int targetId = hit.entityHit == null ? -1 : hit.entityHit.getEntityId();
                 if (targetId != action.target) { reject(player, "target_changed_or_occluded"); return; }
             }
         }
         if (action.kind == USE_BUCKET) {
             bucketTarget = hit;
-            try { player.theItemInWorldManager.tryUseItem(player, player.worldObj, item); }
+            boolean success = false;
+            try { success = player.theItemInWorldManager.tryUseItem(player, player.worldObj, item); }
             finally { bucketTarget = null; }
+            if (success) {
+                FreecamInteraction.deductUsage(player);
+            }
         } else if (action.kind == FISH) {
             if (!rod) { reject(player, "not_fishing_rod"); return; }
             fishing = true;
             float yaw = player.rotationYaw, pitch = player.rotationPitch;
+            boolean success = false;
             try {
                 if (!retrieve) {
                     double x = hit.hitVec.xCoord - player.posX;
@@ -153,9 +159,13 @@ public final class FreecamActions {
                 }
                 PlayerInteractEvent event = ForgeEventFactory.onPlayerInteract(player, PlayerInteractEvent.Action.RIGHT_CLICK_AIR,
                         0, 0, 0, -1, player.worldObj);
-                if (!event.isCanceled() && event.useItem != cpw.mods.fml.common.eventhandler.Event.Result.DENY)
-                    player.theItemInWorldManager.tryUseItem(player, player.worldObj, item);
+                if (!event.isCanceled() && event.useItem != cpw.mods.fml.common.eventhandler.Event.Result.DENY) {
+                    success = player.theItemInWorldManager.tryUseItem(player, player.worldObj, item);
+                }
             } finally { player.rotationYaw = yaw; player.rotationPitch = pitch; fishing = false; }
+            if (success) {
+                FreecamInteraction.deductUsage(player);
+            }
         } else if (hit.entityHit instanceof EntityLivingBase) {
             EntityLivingBase living = (EntityLivingBase) hit.entityHit;
             WorldServer ws = (WorldServer) player.worldObj;
@@ -167,6 +177,7 @@ public final class FreecamActions {
                 if (done) {
                     player.swingItem();
                     ws.getEntityTracker().func_151248_b(player, new S0BPacketAnimation(player, 0));
+                    FreecamInteraction.deductUsage(player);
                 }
             } else {
                 if (living instanceof EntityPlayer && (!net.minecraft.server.MinecraftServer.getServer().isPVPEnabled()
@@ -176,8 +187,10 @@ public final class FreecamActions {
                 double z = Math.max(living.boundingBox.minZ, Math.min(player.posZ, living.boundingBox.maxZ));
                 double reach = player.capabilities.isCreativeMode ? 6 : 3;
                 Vec3 eye = Vec3.createVectorHelper(player.posX, player.posY + player.getEyeHeight(), player.posZ);
+                boolean attacked = false;
                 if (eye.squareDistanceTo(Vec3.createVectorHelper(x, y, z)) < reach * reach && player.canEntityBeSeen(living)) {
                     player.attackTargetEntityWithCurrentItem(living);
+                    attacked = true;
                 } else if (!living.isEntityInvulnerable() && living.canAttackWithItem() && living.hurtTime == 0
                         && !MinecraftForge.EVENT_BUS.post(new AttackEntityEvent(player, living))) {
                     double dx = player.posX - living.posX, dz = player.posZ - living.posZ;
@@ -187,9 +200,13 @@ public final class FreecamActions {
                     living.hurtTime = living.maxHurtTime = 10;
                     ws.getEntityTracker().func_151248_b(living, new S12PacketEntityVelocity(living));
                     ws.getEntityTracker().func_151248_b(living, new S19PacketEntityStatus(living, (byte) 2));
+                    attacked = true;
                 }
-                player.swingItem();
-                ws.getEntityTracker().func_151248_b(player, new S0BPacketAnimation(player, 0));
+                if (attacked) {
+                    player.swingItem();
+                    ws.getEntityTracker().func_151248_b(player, new S0BPacketAnimation(player, 0));
+                    FreecamInteraction.deductUsage(player);
+                }
             }
         } else { reject(player, "not_living_target"); return; }
         player.inventoryContainer.detectAndSendChanges();

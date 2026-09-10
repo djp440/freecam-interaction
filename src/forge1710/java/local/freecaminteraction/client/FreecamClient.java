@@ -14,6 +14,9 @@ import local.freecaminteraction.FreecamInteraction;
 import local.freecaminteraction.FreecamRange;
 import local.freecaminteraction.FreecamTarget;
 import local.freecaminteraction.ModLog;
+import local.freecaminteraction.item.ItemFreecamWand;
+import local.freecaminteraction.item.ItemFreecamWand.WandEntry;
+import local.freecaminteraction.WandTier;
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
 import net.minecraft.client.Minecraft;
@@ -28,6 +31,7 @@ import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.item.ItemBucket;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.AxisAlignedBB;
+import net.minecraft.util.ChatComponentTranslation;
 import net.minecraft.util.MathHelper;
 import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.util.MovementInput;
@@ -49,6 +53,7 @@ public final class FreecamClient {
     private static final Field DISTANCE = ReflectionHelper.findField(EntityRenderer.class, "thirdPersonDistance", "field_78490_B");
     private static final Field PREVIOUS_DISTANCE = ReflectionHelper.findField(EntityRenderer.class, "thirdPersonDistanceTemp", "field_78491_C");
     private static FreecamClient instance;
+    private static WandTier activeTier = WandTier.NORMAL;
     private EntityClientPlayerMP player;
     private EntityOtherPlayerMP camera;
     private MovementInput previousInput;
@@ -77,6 +82,29 @@ public final class FreecamClient {
         return instance != null && instance.current();
     }
 
+    public static WandTier currentTier() {
+        return activeTier;
+    }
+
+    public static void onAck(int tierOrdinal, int radius) {
+        activeTier = WandTier.fromOrdinal(tierOrdinal);
+        ModLog.info("Client active tier updated: " + activeTier.name() + "; radius=" + radius);
+    }
+
+    public static void onReject() {
+        if (instance != null && instance.current()) {
+            instance.exit("server_rejected");
+        }
+    }
+
+    public static void toggleFromItem() {
+        if (instance == null || MC.thePlayer == null) return;
+        if (instance.camera != null) return;
+        if (MC.renderViewEntity == MC.thePlayer) {
+            instance.enter();
+        }
+    }
+
     public static MovingObjectPosition cameraRayTrace(net.minecraft.world.World world, Vec3 start, Vec3 end) {
         if (isFreecamActive()) {
             return null;
@@ -103,6 +131,13 @@ public final class FreecamClient {
 
     private void enter() {
         player = MC.thePlayer;
+        WandEntry wand = ItemFreecamWand.findBestWand(player);
+        if (wand == null) {
+            player.addChatMessage(new ChatComponentTranslation("message.freecam_interaction.no_wand"));
+            return;
+        }
+        activeTier = wand.tier;
+
         previousInput = player.movementInput;
         previousView = MC.gameSettings.thirdPersonView;
         previousDebug = MC.gameSettings.debugCamEnable;
@@ -139,7 +174,7 @@ public final class FreecamClient {
         if (!FreecamCollision.isCameraClear(MC.theWorld, initCam.xCoord, initCam.yCoord, initCam.zCoord)) {
             ModLog.info("Initial camera position partially obstructed at " + initCam.xCoord + "," + initCam.yCoord + "," + initCam.zCoord);
         }
-        ModLog.info("Camera entered; player=" + player.posX + "," + player.posY + "," + player.posZ);
+        ModLog.info("Camera entered; player=" + player.posX + "," + player.posY + "," + player.posZ + "; tier=" + activeTier.name());
     }
 
     private void exit(String reason) {
@@ -161,6 +196,7 @@ public final class FreecamClient {
         dragging = false;
         armed = false;
         modeRequested = false;
+        activeTier = WandTier.NORMAL;
         KeyBinding.unPressAllKeys();
         if (MC.currentScreen == null && MC.theWorld != null && Display.isActive()) MC.setIngameFocus();
     }
@@ -308,9 +344,9 @@ public final class FreecamClient {
                     - (down(MC.gameSettings.keyBindSprint) || isKeyDown(Keyboard.KEY_LCONTROL) || isKeyDown(Keyboard.KEY_RCONTROL) ? 1 : 0);
             double[] offset = FreecamMotion.pan(camera.rotationYaw, forward, right, elapsed);
             double yOffset = FreecamMotion.vertical(up, elapsed);
-            double targetAnchorX = FreecamRange.clampCamera(player.posX, camera.posX + offset[0]);
-            double targetAnchorY = FreecamRange.clampCamera(player.posY, camera.posY + yOffset);
-            double targetAnchorZ = FreecamRange.clampCamera(player.posZ, camera.posZ + offset[1]);
+            double targetAnchorX = FreecamRange.clampCamera(player.posX, camera.posX + offset[0], activeTier);
+            double targetAnchorY = FreecamRange.clampCameraY(camera.posY + yOffset);
+            double targetAnchorZ = FreecamRange.clampCamera(player.posZ, camera.posZ + offset[1], activeTier);
             double deltaX = targetAnchorX - camera.posX;
             double deltaY = targetAnchorY - camera.posY;
             double deltaZ = targetAnchorZ - camera.posZ;
@@ -369,7 +405,9 @@ public final class FreecamClient {
         if (event.type != RenderGameOverlayEvent.ElementType.ALL || !current() || MC.currentScreen != null || MC.gameSettings.hideGUI) return;
         int width = event.resolution.getScaledWidth();
         Gui.drawRect(4, 4, width - 36, 42, 0xD9101C29);
-        MC.fontRenderer.drawStringWithShadow(I18n.format("screen.freecam_interaction.title"), 8, 8, 0xE6F8F5);
+        String wandName = I18n.format("item.freecam_interaction.wand_" + activeTier.id + ".name");
+        String title = I18n.format("screen.freecam_interaction.title") + " [" + wandName + "]";
+        MC.fontRenderer.drawStringWithShadow(title, 8, 8, 0xE6F8F5);
         String help = I18n.format(FreecamInteraction.acknowledged ? "screen.freecam_interaction.help" : "screen.freecam_interaction.unsupported",
                 GameSettings.getKeyDisplayString(TOGGLE.getKeyCode()));
         MC.fontRenderer.drawSplitString(help, 8, 22, Math.max(1, width - 52), 0xE6F8F5);

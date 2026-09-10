@@ -1,5 +1,16 @@
 # 项目记忆
 
+- 2026-09-10 12:41：用户明确反馈“测试成功，提交”，据此记录 Forge 1.7.10 自由视角法杖系统（普通/高级/创造三级法杖、合成配方与原生铁砧25%修复、背包优先级扫描、有效动作扣费与2->1自动接续防损坏消失、ForgeChunkManager票据与PlayerManager区块订阅保载、动态视距与选区外框）验收通过。按用户指令提交本轮修改。
+
+- 2026-09-10 12:35：按 `PLAN-wands-1710.md` 与 `HANDOFF-wands-1710.md` 完成 Forge 1.7.10 自由视角法杖系统全部实现与自动化冒烟验证。
+  - 法杖物品与注册：实现 `WandTier`（`NORMAL` 5×5区块/2048耐久、`ADVANCED` 7×7区块/8192耐久、`CREATIVE` 9×9区块/无限耐久）、`ItemFreecamWand`（原生 `getIsRepairable` 钻石/钻石块 25% 修复、右键切换模式、中英文 tooltip）与 `FreecamWandRegistry`（普通与高级法杖合成配方）；
+  - 背包扫描与接续：`ItemFreecamWand.findBestWand` 实现主背包 0..35 扫描（优先级：创造 > 高级 > 普通，同级小槽位优先，耐久 <= 1 不可用）；`FreecamInteraction.deductUsage` 在有效操作（方块破坏/放置、容器打开、实体交互/攻击、桶操作、钓竿抛收）成功后扣费 1 点；耐久从 2 降至 1 时触发接续（handoff），自动切换至下一把可用法杖并同步更新票据与视距，若无可用法杖平滑退出，法杖绝不损坏消失；
+  - 区块保载与订阅：`FreecamChunkLoader` 注册 `ForgeChunkManager.setForcedChunkLoadingCallback`，按需申请多张票据维持区块强加载，并反射 `PlayerManager` 的 `ChunkWatcher.addPlayer/removePlayer` 同步区块/实体数据，会话退出时完整释放；
+  - 客户端与选区适配：`FreecamClient` 检查法杖可用性进入、动态计算视距截断（外接圆半径 +50%）、HUD 顶部显示等级/剩余耐久/操作范围；`FreecamSelection` 根据等级渲染对应尺寸外框；
+  - 验证凭据：`scripts/forge1710.ps1 smoke` 自动化冒烟全部通过（日志 `logs/tools/2026-09-10 12-33-28.log`）。覆盖：真实 `ItemBucket` / `EntityAITradePlayer` / `EntityRenderer` 字节码补丁校验、报文序列化截断防越界、Unsafe 真实玩家背包选取与耐久边界、纯 Java 8 `LegacyCheck` 几何/视距/等级断言，以及产物 JAR（`freecam_interaction-0.1.0-forge1710-experiment.jar`）包含 `WandTier.class`、`ItemFreecamWand.class`、`FreecamChunkLoader.class` 等全部关键类。未擅自启动游戏客户端或修改存档，等待用户进一步验收指令。
+
+- 2026-09-10 12:17：法杖功能的方向与范围均获用户确认，执行方案见 PLAN-wands-1710.md；当前仅设计交接，尚未实现或验证功能。目标仅 Forge 1.7.10（保留 LWJGL2/lwjgl3ify），1.21.1 对应功能待实现。主工作树 HANDOFF-wands-1710.md 汇总交接状态和技能。创造法杖外围保载按原需求及全部确认解释为会话期间保留已发现的加载区块，详细边界与待核验底层接口见方案。保留既有未提交碰撞修复；未运行构建或游戏。
+
 - 2026-09-10 12:17：用户明确人工确认双版本（Forge 1.7.10 与 NeoForge 1.21.1）自由视角障碍跳位修复（方案 A）验收无误。按用户指令提交本轮修改。
 
 - 2026-09-10 11:17：按用户要求启动 1.7.10 + lwjgl3ify 开发客户端以实机体验障碍跳位修复（方案 A）。`pwsh -File scripts/lwjgl3ify.ps1 client` 构建并启动，游戏成功加载最新自由视角交互 Mod、UniMixins、Iron Chests 及 lwjgl3ify，OpenAL 音频初始化完成，主菜单就绪。客户端留给用户测试体验，未进入世界或修改存档。

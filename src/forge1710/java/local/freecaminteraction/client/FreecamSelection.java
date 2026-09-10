@@ -4,6 +4,7 @@ import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import local.freecaminteraction.FreecamRange;
 import local.freecaminteraction.FreecamTarget;
+import local.freecaminteraction.WandTier;
 import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderGlobal;
@@ -16,7 +17,7 @@ import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.util.glu.GLU;
 
-/** 从本帧实际矩阵反投影，包含第三人称避障、FOV 与窗口尺寸。 */
+/** 从本帧实际矩阵反投影，包含第三人称避障、FOV 与窗口尺寸。边界框按当前法杖等级绘制区块范围。 */
 public final class FreecamSelection {
     private final FloatBuffer model = BufferUtils.createFloatBuffer(16);
     private final FloatBuffer projection = BufferUtils.createFloatBuffer(16);
@@ -59,11 +60,19 @@ public final class FreecamSelection {
             GL11.glDepthMask(false);
             GL11.glLineWidth(1.0F);
             GL11.glTranslated(-camera.posX, -camera.posY, -camera.posZ);
-            int x = FreecamRange.minimumBlock(mc.thePlayer.posX);
-            int y = FreecamRange.minimumBlock(mc.thePlayer.boundingBox.minY);
-            int z = FreecamRange.minimumBlock(mc.thePlayer.posZ);
+
+            WandTier tier = FreecamClient.currentTier();
+            int cx = FreecamRange.centerChunk(mc.thePlayer.posX);
+            int cz = FreecamRange.centerChunk(mc.thePlayer.posZ);
+            int r = tier == null ? WandTier.NORMAL.radius : tier.radius;
+            int minX = FreecamRange.minBlock(cx, r);
+            int maxX = FreecamRange.maxBlock(cx, r);
+            int minZ = FreecamRange.minBlock(cz, r);
+            int maxZ = FreecamRange.maxBlock(cz, r);
+
             GL11.glColor4f(0.65F, 0.95F, 0.9F, 0.35F);
-            RenderGlobal.drawOutlinedBoundingBox(AxisAlignedBB.getBoundingBox(x, y, z, x + 16, y + 16, z + 16), -1);
+            RenderGlobal.drawOutlinedBoundingBox(AxisAlignedBB.getBoundingBox(minX, 0, minZ, maxX, 256, maxZ), -1);
+
             if (hit != null) {
                 if (hit.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
                     Block block = mc.theWorld.getBlock(hit.blockX, hit.blockY, hit.blockZ);

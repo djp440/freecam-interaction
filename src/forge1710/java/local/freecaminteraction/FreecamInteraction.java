@@ -13,15 +13,20 @@ import cpw.mods.fml.common.network.NetworkRegistry;
 import cpw.mods.fml.common.network.simpleimpl.*;
 import cpw.mods.fml.relauncher.Side;
 import io.netty.buffer.ByteBuf;
+import local.freecaminteraction.item.ItemFreecamWand;
+import local.freecaminteraction.item.ItemFreecamWand.WandEntry;
+import local.freecaminteraction.WandTier;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.inventory.Container;
+import net.minecraft.item.ItemStack;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.common.util.BlockSnapshot;
 import net.minecraftforge.event.entity.player.*;
 import net.minecraftforge.event.world.BlockEvent;
 
-/** 模式消息在服务端 tick 应用；挖掘、放置和权限仍走 Forge 原生链路。 */
+/** 模式消息在服务端 tick 应用；根据法杖等级与动态区块范围鉴权与扣费。 */
 public final class FreecamInteraction {
     private static SimpleNetworkWrapper channel;
     public static volatile boolean available;
@@ -42,7 +47,9 @@ public final class FreecamInteraction {
 
     public static void request(boolean enabled) {
         acknowledged = false;
-        if (available && channel != null) channel.sendToServer(new ModeRequest(++clientEpoch, enabled));
+        if (available && channel != null) {
+            channel.sendToServer(new ModeRequest(++clientEpoch, enabled));
+        }
     }
 
     public static boolean active(EntityPlayer player) {
@@ -50,14 +57,26 @@ public final class FreecamInteraction {
         return state != null && state.dimension == player.dimension && player.isEntityAlive() && !player.isPlayerSleeping();
     }
 
+    public static WandTier getActiveTier(EntityPlayer player) {
+        if (player == null) return WandTier.NORMAL;
+        if (player.worldObj != null && player.worldObj.isRemote) {
+            return local.freecaminteraction.client.FreecamClient.currentTier();
+        }
+        State state = ACTIVE.get(player);
+        return state != null ? state.tier : WandTier.NORMAL;
+    }
+
     public static boolean inside(EntityPlayer player, int x, int y, int z) {
+        WandTier tier = getActiveTier(player);
         return y >= 0 && y < player.worldObj.getHeight() && player.worldObj.blockExists(x, y, z)
-                && FreecamRange.contains(player.posX, player.boundingBox.minY, player.posZ, x, y, z);
+                && FreecamRange.contains(player.worldObj, tier, player.posX, player.boundingBox.minY, player.posZ, x, y, z);
     }
 
     public static double distance(EntityPlayer player, double x, double y, double z) {
         if (active(player) && Double.isFinite(x) && Double.isFinite(y) && Double.isFinite(z)
-                && inside(player, (int) Math.floor(x), (int) Math.floor(y), (int) Math.floor(z))) return 0.0D;
+                && inside(player, (int) Math.floor(x), (int) Math.floor(y), (int) Math.floor(z))) {
+            return 0.0D;
+        }
         double deltaX = player.posX - x;
         double deltaY = player.posY - y;
         double deltaZ = player.posZ - z;
@@ -78,22 +97,110 @@ public final class FreecamInteraction {
         player.theItemInWorldManager.cancelDestroyingBlock(0, 0, 0);
     }
 
-    private static void enable(EntityPlayerMP player) {
+    private static void enable(EntityPlayerMP player, WandEntry wand) {
+        FreecamChunkLoader.ChunkSession session = FreecamChunkLoader.createSession(
+                FreecamInteractionMod.instance, player, wand.tier);
+        if (session == null) {
+            channel.sendTo(new ModeAck(clientEpoch, false, 0, 0), player);
+            ModLog.info("Server rejected freecam mode for " + player.getCommandSenderName() + ": chunk allocation failed");
+            return;
+        }
+
         State state = ACTIVE.get(player);
         if (state == null) {
-            state = new State(player.dimension, player.theItemInWorldManager.getBlockReachDistance());
+            state = new State(player.dimension, player.theItemInWorldManager.getBlockReachDistance(), wand.tier, wand.slot, session);
             ACTIVE.put(player, state);
-        } else state.dimension = player.dimension;
+        } else {
+            state.dimension = player.dimension;
+            state.tier = wand.tier;
+            state.selectedSlot = wand.slot;
+            if (state.chunkSession != null) FreecamChunkLoader.releaseSession(state.chunkSession);
+            state.chunkSession = session;
+        }
+        state.lastContainer = player.openContainer;
         cancelMining(player);
-        player.theItemInWorldManager.setBlockReachDistance(32.0D);
+        player.theItemInWorldManager.setBlockReachDistance(256.0D);
+        channel.sendTo(new ModeAck(clientEpoch, true, wand.tier.ordinal(), wand.tier.radius), player);
+        ModLog.info("Server freecam enabled; player=" + player.getCommandSenderName() + "; tier=" + wand.tier.name() + "; slot=" + wand.slot);
     }
 
-    private static void clear(EntityPlayerMP player) {
+    public static void clear(EntityPlayerMP player) {
         PENDING.remove(player);
         FreecamActions.clear(player);
         State state = ACTIVE.remove(player);
         cancelMining(player);
-        if (state != null) player.theItemInWorldManager.setBlockReachDistance(state.previousReach);
+        if (state != null) {
+            FreecamChunkLoader.releaseSession(state.chunkSession);
+            player.theItemInWorldManager.setBlockReachDistance(state.previousReach);
+            channel.sendTo(new ModeAck(0, false, 0, 0), player);
+            ModLog.info("Server freecam cleared; player=" + player.getCommandSenderName());
+        }
+    }
+
+    /** 服务端唯一扣费入口：复核法杖 -> 扣除 1 耐久（钳制至少剩 1） -> 发生 2->1 则立即接续下一把 */
+    public static boolean deductUsage(EntityPlayerMP player) {
+        State state = ACTIVE.get(player);
+        if (state == null || !active(player)) return false;
+        if (state.tier == WandTier.CREATIVE) {
+            return true; // 创造法杖不扣耐久
+        }
+
+        ItemStack stack = null;
+        if (state.selectedSlot >= 0 && state.selectedSlot < 36) {
+            stack = player.inventory.mainInventory[state.selectedSlot];
+        }
+        if (stack == null || !(stack.getItem() instanceof ItemFreecamWand)
+                || ((ItemFreecamWand) stack.getItem()).tier != state.tier) {
+            WandEntry rechecked = ItemFreecamWand.findBestWand(player);
+            if (rechecked == null) {
+                clear(player);
+                return false;
+            }
+            state.selectedSlot = rechecked.slot;
+            state.tier = rechecked.tier;
+            stack = rechecked.stack;
+        }
+
+        ItemFreecamWand wand = (ItemFreecamWand) stack.getItem();
+        int damage = stack.getItemDamage();
+        int maxDamage = wand.tier.maxDamage;
+        int remaining = maxDamage - damage;
+
+        if (remaining <= 1) {
+            succeedWand(player, state);
+            return false;
+        }
+
+        damage++;
+        if (damage > maxDamage - 1) damage = maxDamage - 1; // 钳制最多损耗至剩余 1，绝不损坏消失
+        stack.setItemDamage(damage);
+        player.inventoryContainer.detectAndSendChanges();
+
+        int newRemaining = maxDamage - damage;
+        ModLog.info("Wand durability deducted; player=" + player.getCommandSenderName()
+                + "; slot=" + state.selectedSlot + "; remaining=" + newRemaining);
+
+        if (newRemaining == 1) {
+            succeedWand(player, state);
+        }
+        return true;
+    }
+
+    private static void succeedWand(EntityPlayerMP player, State state) {
+        WandEntry next = ItemFreecamWand.findBestWand(player);
+        if (next != null) {
+            state.selectedSlot = next.slot;
+            if (next.tier != state.tier) {
+                state.tier = next.tier;
+                FreecamChunkLoader.releaseSession(state.chunkSession);
+                state.chunkSession = FreecamChunkLoader.createSession(FreecamInteractionMod.instance, player, next.tier);
+                channel.sendTo(new ModeAck(0, true, next.tier.ordinal(), next.tier.radius), player);
+            }
+            ModLog.info("Wand succeeded to slot=" + next.slot + "; tier=" + next.tier.name());
+        } else {
+            ModLog.info("No more available wands for player=" + player.getCommandSenderName() + "; exiting freecam");
+            clear(player);
+        }
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
@@ -117,8 +224,18 @@ public final class FreecamInteraction {
         if (!active(event.getPlayer()) || !inside(event.getPlayer(), event.x, event.y, event.z)) {
             event.setCanceled(true);
             cancelMining((EntityPlayerMP) event.getPlayer());
-        } else ModLog.info("Allowed break: player=" + event.getPlayer().getCommandSenderName()
-                + "; target=" + event.x + "," + event.y + "," + event.z);
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = false)
+    public void breakBlockSuccess(BlockEvent.BreakEvent event) {
+        if (event.world.isRemote || !ACTIVE.containsKey(event.getPlayer()) || event.isCanceled()) return;
+        EntityPlayerMP player = (EntityPlayerMP) event.getPlayer();
+        if (active(player)) {
+            deductUsage(player);
+            ModLog.info("Allowed break: player=" + player.getCommandSenderName()
+                    + "; target=" + event.x + "," + event.y + "," + event.z);
+        }
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
@@ -130,8 +247,17 @@ public final class FreecamInteraction {
                 if (!inside(event.player, block.x, block.y, block.z)) event.setCanceled(true);
             }
         }
-        ModLog.info((event.isCanceled() ? "Rejected" : "Allowed") + " placement: player="
-                + event.player.getCommandSenderName() + "; target=" + event.x + "," + event.y + "," + event.z);
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST, receiveCanceled = false)
+    public void placeSuccess(BlockEvent.PlaceEvent event) {
+        if (event.world.isRemote || !ACTIVE.containsKey(event.player) || event.isCanceled()) return;
+        EntityPlayerMP player = (EntityPlayerMP) event.player;
+        if (active(player)) {
+            deductUsage(player);
+            ModLog.info("Allowed placement: player=" + player.getCommandSenderName()
+                    + "; target=" + event.x + "," + event.y + "," + event.z);
+        }
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
@@ -150,18 +276,48 @@ public final class FreecamInteraction {
 
     @SubscribeEvent
     public void tick(TickEvent.PlayerTickEvent event) {
-        if (event.side != Side.SERVER || event.phase != TickEvent.Phase.START || !(event.player instanceof EntityPlayerMP)) return;
+        if (event.side != Side.SERVER || !(event.player instanceof EntityPlayerMP)) return;
         EntityPlayerMP player = (EntityPlayerMP) event.player;
-        ModeRequest mode = PENDING.remove(player);
-        if (mode != null) {
-            boolean enabled = mode.enabled && player.isEntityAlive() && !player.isPlayerSleeping();
-            if (enabled) enable(player); else clear(player);
-            channel.sendTo(new ModeAck(mode.epoch, enabled), player);
-            ModLog.info("Server mode=" + enabled + "; player=" + player.getCommandSenderName());
-        }
-        if (ACTIVE.containsKey(player)) {
-            if (!active(player)) clear(player);
-            else player.theItemInWorldManager.setBlockReachDistance(32.0D);
+
+        if (event.phase == TickEvent.Phase.START) {
+            ModeRequest mode = PENDING.remove(player);
+            if (mode != null) {
+                clientEpoch = mode.epoch;
+                boolean enabled = mode.enabled && player.isEntityAlive() && !player.isPlayerSleeping();
+                if (enabled) {
+                    WandEntry wand = ItemFreecamWand.findBestWand(player);
+                    if (wand != null) {
+                        enable(player, wand);
+                    } else {
+                        clear(player);
+                        channel.sendTo(new ModeAck(mode.epoch, false, 0, 0), player);
+                        ModLog.info("Server rejected freecam mode for " + player.getCommandSenderName() + ": no available wand");
+                    }
+                } else {
+                    clear(player);
+                    channel.sendTo(new ModeAck(mode.epoch, false, 0, 0), player);
+                }
+            }
+
+            if (ACTIVE.containsKey(player)) {
+                if (!active(player)) {
+                    clear(player);
+                } else {
+                    player.theItemInWorldManager.setBlockReachDistance(256.0D);
+                }
+            }
+        } else if (event.phase == TickEvent.Phase.END) {
+            State state = ACTIVE.get(player);
+            if (state != null) {
+                if (player.openContainer != state.lastContainer) {
+                    if (player.openContainer != player.inventoryContainer) {
+                        deductUsage(player);
+                        ModLog.info("Container opened: player=" + player.getCommandSenderName()
+                                + "; container=" + player.openContainer.getClass().getSimpleName());
+                    }
+                    state.lastContainer = player.openContainer;
+                }
+            }
         }
     }
 
@@ -186,14 +342,25 @@ public final class FreecamInteraction {
     private static final class State {
         int dimension;
         final double previousReach;
-        State(int dimension, double previousReach) { this.dimension = dimension; this.previousReach = previousReach; }
+        WandTier tier;
+        int selectedSlot;
+        Container lastContainer;
+        FreecamChunkLoader.ChunkSession chunkSession;
+
+        State(int dimension, double previousReach, WandTier tier, int selectedSlot, FreecamChunkLoader.ChunkSession chunkSession) {
+            this.dimension = dimension;
+            this.previousReach = previousReach;
+            this.tier = tier;
+            this.selectedSlot = selectedSlot;
+            this.chunkSession = chunkSession;
+        }
     }
 
     public static final class ModeRequest implements IMessage {
-        int epoch;
-        boolean enabled;
+        public int epoch;
+        public boolean enabled;
         public ModeRequest() { }
-        ModeRequest(int epoch, boolean enabled) { this.epoch = epoch; this.enabled = enabled; }
+        public ModeRequest(int epoch, boolean enabled) { this.epoch = epoch; this.enabled = enabled; }
         public void fromBytes(ByteBuf bytes) {
             if (bytes.readableBytes() != 5) throw new IllegalArgumentException("Invalid freecam mode request");
             epoch = bytes.readInt();
@@ -203,16 +370,27 @@ public final class FreecamInteraction {
     }
 
     public static final class ModeAck implements IMessage {
-        int epoch;
-        boolean enabled;
+        public int epoch;
+        public boolean enabled;
+        public int tierOrdinal;
+        public int radius;
         public ModeAck() { }
-        ModeAck(int epoch, boolean enabled) { this.epoch = epoch; this.enabled = enabled; }
+        public ModeAck(int epoch, boolean enabled, int tierOrdinal, int radius) {
+            this.epoch = epoch; this.enabled = enabled; this.tierOrdinal = tierOrdinal; this.radius = radius;
+        }
         public void fromBytes(ByteBuf bytes) {
-            if (bytes.readableBytes() != 5) throw new IllegalArgumentException("Invalid freecam mode acknowledgement");
+            if (bytes.readableBytes() != 13) throw new IllegalArgumentException("Invalid freecam mode acknowledgement");
             epoch = bytes.readInt();
             enabled = bytes.readBoolean();
+            tierOrdinal = bytes.readInt();
+            radius = bytes.readInt();
         }
-        public void toBytes(ByteBuf bytes) { bytes.writeInt(epoch); bytes.writeBoolean(enabled); }
+        public void toBytes(ByteBuf bytes) {
+            bytes.writeInt(epoch);
+            bytes.writeBoolean(enabled);
+            bytes.writeInt(tierOrdinal);
+            bytes.writeInt(radius);
+        }
     }
 
     public static final class ServerMode implements IMessageHandler<ModeRequest, IMessage> {
@@ -224,9 +402,14 @@ public final class FreecamInteraction {
 
     public static final class ClientMode implements IMessageHandler<ModeAck, IMessage> {
         public IMessage onMessage(ModeAck message, MessageContext context) {
-            if (message.epoch == clientEpoch) {
+            if (message.epoch == clientEpoch || message.epoch == 0) {
                 acknowledged = message.enabled;
-                ModLog.info("Server interaction mode acknowledged=" + message.enabled);
+                if (message.enabled) {
+                    local.freecaminteraction.client.FreecamClient.onAck(message.tierOrdinal, message.radius);
+                } else {
+                    local.freecaminteraction.client.FreecamClient.onReject();
+                }
+                ModLog.info("Server interaction mode acknowledged=" + message.enabled + "; tier=" + message.tierOrdinal);
             }
             return null;
         }

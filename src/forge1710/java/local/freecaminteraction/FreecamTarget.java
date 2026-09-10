@@ -1,5 +1,6 @@
 package local.freecaminteraction;
 
+import local.freecaminteraction.WandTier;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.player.EntityPlayer;
@@ -7,16 +8,18 @@ import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.util.Vec3;
 
-/** 客户端选取和服务端复核使用同一射线，不跳过范围外的前景遮挡。 */
+/** 客户端选取和服务端复核使用同一射线，根据当前法杖等级的区块范围授权，不跳过范围外的前景遮挡。 */
 public final class FreecamTarget {
     private FreecamTarget() {}
 
     public static boolean allowed(EntityPlayer player, Entity entity) {
+        if (player == null || entity == null || entity == player) return false;
         AxisAlignedBB box = entity.boundingBox;
-        return entity != player && entity instanceof EntityLivingBase && entity.isEntityAlive()
+        WandTier tier = FreecamInteraction.getActiveTier(player);
+        return entity instanceof EntityLivingBase && entity.isEntityAlive()
                 && entity.worldObj == player.worldObj && box != null
-                && FreecamRange.contains(player.posX, player.boundingBox.minY, player.posZ,
-                    (box.minX + box.maxX) / 2 - 0.5, (box.minY + box.maxY) / 2 - 0.5, (box.minZ + box.maxZ) / 2 - 0.5);
+                && FreecamRange.contains(player.worldObj, tier, player.posX, player.boundingBox.minY, player.posZ,
+                    (box.minX + box.maxX) / 2.0 - 0.5, (box.minY + box.maxY) / 2.0 - 0.5, (box.minZ + box.maxZ) / 2.0 - 0.5);
     }
 
     public static MovingObjectPosition pickBlock(EntityPlayer player, Vec3 start, Vec3 end, boolean liquids) {
@@ -24,13 +27,14 @@ public final class FreecamTarget {
         MovingObjectPosition hit = player.worldObj.rayTraceBlocks(
                 Vec3.createVectorHelper(start.xCoord, start.yCoord, start.zCoord),
                 Vec3.createVectorHelper(end.xCoord, end.yCoord, end.zCoord), liquids);
-        return hit != null && FreecamRange.contains(player.posX, player.boundingBox.minY, player.posZ,
+        WandTier tier = FreecamInteraction.getActiveTier(player);
+        return hit != null && FreecamRange.contains(player.worldObj, tier, player.posX, player.boundingBox.minY, player.posZ,
                 hit.blockX, hit.blockY, hit.blockZ) ? hit : null;
     }
 
     public static MovingObjectPosition pick(EntityPlayer player, Vec3 start, Vec3 end) {
         if (!validRay(player, start, end)) return null;
-        // 1.7.10 World 射线步进会原地改写起点；实体检测和网络复核必须保留相机原点。
+        // 1.7.10 World 射线步进会原地改写起点；实体检测和网络复核必须保留相机原点副本。
         MovingObjectPosition nearest = player.worldObj.rayTraceBlocks(
                 Vec3.createVectorHelper(start.xCoord, start.yCoord, start.zCoord),
                 Vec3.createVectorHelper(end.xCoord, end.yCoord, end.zCoord));
@@ -51,8 +55,11 @@ public final class FreecamTarget {
             }
         }
         if (nearest == null) return null;
-        if (nearest.typeOfHit == MovingObjectPosition.MovingObjectType.ENTITY) return allowed(player, nearest.entityHit) ? nearest : null;
-        return FreecamRange.contains(player.posX, player.boundingBox.minY, player.posZ,
+        if (nearest.typeOfHit == MovingObjectPosition.MovingObjectType.ENTITY) {
+            return allowed(player, nearest.entityHit) ? nearest : null;
+        }
+        WandTier tier = FreecamInteraction.getActiveTier(player);
+        return FreecamRange.contains(player.worldObj, tier, player.posX, player.boundingBox.minY, player.posZ,
                 nearest.blockX, nearest.blockY, nearest.blockZ) ? nearest : null;
     }
 

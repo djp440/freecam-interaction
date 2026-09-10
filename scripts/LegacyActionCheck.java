@@ -267,8 +267,71 @@ public class LegacyActionCheck {
         assert FreecamTarget.pick(null, start, start) == null;
         assert FreecamTarget.pick(null, start, Vec3.createVectorHelper(Double.NaN, 0, 0)) == null;
         assert FreecamTarget.pick(null, start, Vec3.createVectorHelper(1000, 0, 0)) == null;
-        assert FreecamRange.contains(0, 0, 0, -8.5, -0.5, -0.5);
-        assert !FreecamRange.contains(0, 0, 0, 7.5, -0.5, -0.5);
-        System.out.println("Legacy action checks passed: wire format, truncation, invalid rays, entity-center boundaries.");
+        assert FreecamRange.contains(0, 0, 0, -32.0, 64.0, 0.0);
+        assert !FreecamRange.contains(0, 0, 0, 48.0, 64.0, 0.0);
+
+        // ModeRequest 报文格式校验
+        ByteBuf reqBuf = Unpooled.buffer();
+        try {
+            new local.freecaminteraction.FreecamInteraction.ModeRequest(42, true).toBytes(reqBuf);
+            assert reqBuf.readableBytes() == 5 : "ModeRequest 应为 5 字节";
+            local.freecaminteraction.FreecamInteraction.ModeRequest reqDecoded = new local.freecaminteraction.FreecamInteraction.ModeRequest();
+            reqDecoded.fromBytes(reqBuf);
+            assert reqDecoded.epoch == 42 && reqDecoded.enabled;
+            try { reqDecoded.fromBytes(reqBuf); throw new AssertionError("未拦截截断报文"); } catch (IllegalArgumentException expected) {}
+        } finally { reqBuf.release(); }
+
+        // ModeAck 报文格式校验
+        ByteBuf ackBuf = Unpooled.buffer();
+        try {
+            new local.freecaminteraction.FreecamInteraction.ModeAck(42, true, 1, 3).toBytes(ackBuf);
+            assert ackBuf.readableBytes() == 13 : "ModeAck 应为 13 字节";
+            local.freecaminteraction.FreecamInteraction.ModeAck ackDecoded = new local.freecaminteraction.FreecamInteraction.ModeAck();
+            ackDecoded.fromBytes(ackBuf);
+            assert ackDecoded.epoch == 42 && ackDecoded.enabled && ackDecoded.tierOrdinal == 1 && ackDecoded.radius == 3;
+            try { ackDecoded.fromBytes(ackBuf); throw new AssertionError("未拦截截断报文"); } catch (IllegalArgumentException expected) {}
+        } finally { ackBuf.release(); }
+
+        // 法杖物品与背包扫描选取断言
+        local.freecaminteraction.item.ItemFreecamWand wandNorm = new local.freecaminteraction.item.ItemFreecamWand(local.freecaminteraction.WandTier.NORMAL);
+        local.freecaminteraction.item.ItemFreecamWand wandAdv = new local.freecaminteraction.item.ItemFreecamWand(local.freecaminteraction.WandTier.ADVANCED);
+        local.freecaminteraction.item.ItemFreecamWand wandCre = new local.freecaminteraction.item.ItemFreecamWand(local.freecaminteraction.WandTier.CREATIVE);
+        assert wandNorm.getMaxDamage() == 2048;
+        assert wandAdv.getMaxDamage() == 8192;
+        assert wandCre.getMaxDamage() == 0;
+        assert !wandNorm.getIsRepairable(new net.minecraft.item.ItemStack(wandNorm), null);
+        assert !wandCre.getIsRepairable(new net.minecraft.item.ItemStack(wandCre), new net.minecraft.item.ItemStack(wandNorm));
+
+        java.lang.reflect.Field field = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+        field.setAccessible(true);
+        sun.misc.Unsafe unsafe = (sun.misc.Unsafe) field.get(null);
+        net.minecraft.entity.player.EntityPlayerMP testPlayer = (net.minecraft.entity.player.EntityPlayerMP) unsafe.allocateInstance(net.minecraft.entity.player.EntityPlayerMP.class);
+        testPlayer.inventory = new net.minecraft.entity.player.InventoryPlayer(testPlayer);
+
+        // 槽位 0 放剩余 1 点耐久的普通法杖 -> 不可用，应返回 null
+        testPlayer.inventory.mainInventory[0] = new net.minecraft.item.ItemStack(wandNorm, 1, 2047);
+        assert local.freecaminteraction.item.ItemFreecamWand.findBestWand(testPlayer) == null : "耐久<=1 的法杖不可用";
+
+        // 槽位 1 放剩余 2 点耐久的普通法杖 -> 可用，选取槽位 1
+        testPlayer.inventory.mainInventory[1] = new net.minecraft.item.ItemStack(wandNorm, 1, 2046);
+        local.freecaminteraction.item.ItemFreecamWand.WandEntry selected = local.freecaminteraction.item.ItemFreecamWand.findBestWand(testPlayer);
+        assert selected != null && selected.slot == 1 && selected.tier == local.freecaminteraction.WandTier.NORMAL;
+
+        // 槽位 5 放高级法杖 -> 高级 > 普通，选取槽位 5
+        testPlayer.inventory.mainInventory[5] = new net.minecraft.item.ItemStack(wandAdv, 1, 100);
+        selected = local.freecaminteraction.item.ItemFreecamWand.findBestWand(testPlayer);
+        assert selected != null && selected.slot == 5 && selected.tier == local.freecaminteraction.WandTier.ADVANCED;
+
+        // 槽位 8 放创造法杖 -> 创造 > 高级，选取槽位 8
+        testPlayer.inventory.mainInventory[8] = new net.minecraft.item.ItemStack(wandCre, 1, 0);
+        selected = local.freecaminteraction.item.ItemFreecamWand.findBestWand(testPlayer);
+        assert selected != null && selected.slot == 8 && selected.tier == local.freecaminteraction.WandTier.CREATIVE;
+
+        // 槽位 3 也放创造法杖 -> 同级槽位较小者优先，选取槽位 3
+        testPlayer.inventory.mainInventory[3] = new net.minecraft.item.ItemStack(wandCre, 1, 0);
+        selected = local.freecaminteraction.item.ItemFreecamWand.findBestWand(testPlayer);
+        assert selected != null && selected.slot == 3 && selected.tier == local.freecaminteraction.WandTier.CREATIVE;
+
+        System.out.println("Legacy action checks passed: wire format, truncation, invalid rays, entity-center boundaries, wand selection & attributes.");
     }
 }
