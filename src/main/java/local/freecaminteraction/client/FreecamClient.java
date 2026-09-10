@@ -184,10 +184,16 @@ public final class FreecamClient {
 
     @SubscribeEvent
     public static void onInteraction(InputEvent.InteractionKeyMappingTriggered event) {
-        if (session != null && (!canBuild() || FreecamSelection.target() == null || event.isPickBlock())) {
+        if (session != null && event.isUseItem() && FreecamSelection.customBucket(event.getHand())) {
             event.setCanceled(true);
             event.setSwingHand(false);
-        } else if (session != null && event.isUseItem()) {
+        } else if (session != null && (!canBuild() || (!FreecamSelection.hasTarget() && !FreecamSelection.canRetrieve()) || event.isPickBlock())) {
+            event.setCanceled(true);
+            event.setSwingHand(false);
+        } else if (session != null && FreecamSelection.customAction(event.isAttack())) {
+            event.setCanceled(true);
+            event.setSwingHand(false);
+        } else if (session != null && event.isUseItem() && FreecamSelection.target() != null) {
             ModLog.LOGGER.debug("Freecam use requested; position={}; face={}; hand={}",
                     FreecamSelection.target().getBlockPos(), FreecamSelection.target().getDirection(), event.getHand());
         }

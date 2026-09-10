@@ -9,8 +9,10 @@ import cpw.mods.fml.common.gameevent.TickEvent;
 import cpw.mods.fml.relauncher.ReflectionHelper;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
+import local.freecaminteraction.FreecamActions;
 import local.freecaminteraction.FreecamInteraction;
 import local.freecaminteraction.FreecamRange;
+import local.freecaminteraction.FreecamTarget;
 import local.freecaminteraction.ModLog;
 import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
@@ -23,6 +25,7 @@ import net.minecraft.client.renderer.EntityRenderer;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.client.settings.GameSettings;
 import net.minecraft.client.settings.KeyBinding;
+import net.minecraft.item.ItemBucket;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.MathHelper;
@@ -157,7 +160,8 @@ public final class FreecamClient {
             if (!Mouse.isButtonDown(0) && !Mouse.isButtonDown(1)) armed = true;
             return;
         }
-        if (FreecamInteraction.acknowledged && Mouse.isButtonDown(0) && !dragging && selection.hit != null) damageSelection();
+        if (FreecamInteraction.acknowledged && Mouse.isButtonDown(0) && !dragging && selection.hit != null
+                && selection.hit.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) damageSelection();
         else if (leftMining) stopMining();
     }
 
@@ -173,6 +177,7 @@ public final class FreecamClient {
     @SubscribeEvent
     public void mouse(MouseEvent event) {
         if (!control()) return;
+        if (event.button == 2) { stopMining(); armed = false; }
         event.setCanceled(true);
         if (event.buttonstate && event.button - 100 == TOGGLE.getKeyCode()) exit("toggle_mouse");
         else if (event.button == 0 && event.buttonstate && overClose()) exit("close_button");
@@ -185,6 +190,13 @@ public final class FreecamClient {
 
     private void startMining() {
         MovingObjectPosition hit = selection.hit;
+        if (dragging) return;
+        if (hit != null && hit.entityHit != null) {
+            stopMining();
+            sendAction(FreecamActions.ATTACK);
+            player.swingItem();
+            return;
+        }
         if (hit == null || MC.theWorld.getBlock(hit.blockX, hit.blockY, hit.blockZ).isAir(MC.theWorld, hit.blockX, hit.blockY, hit.blockZ)) return;
         MC.playerController.clickBlock(hit.blockX, hit.blockY, hit.blockZ, hit.sideHit);
         player.swingItem();
@@ -207,8 +219,35 @@ public final class FreecamClient {
         leftMining = false;
     }
 
+    private void sendAction(int kind) { sendAction(kind, selection.hit); }
+
+    private void sendAction(int kind, MovingObjectPosition hit) {
+        if (selection.rayStart == null || selection.rayEnd == null) return;
+        MC.playerController.updateController();
+        FreecamActions.send(new FreecamActions.Action(kind, player.inventory.currentItem,
+                hit != null && hit.entityHit != null ? hit.entityHit.getEntityId() : -1,
+                selection.rayStart, selection.rayEnd, hit == null ? selection.rayEnd : hit.hitVec));
+    }
+
     private void useSelection() {
+        if (dragging) return;
         MovingObjectPosition hit = selection.hit;
+        ItemStack held = player.getHeldItem();
+        if (held != null && held.getItem() instanceof net.minecraft.item.ItemFishingRod) {
+            if (hit != null || player.fishEntity != null) sendAction(FreecamActions.FISH);
+            return;
+        }
+        if (held != null && held.getItem() instanceof ItemBucket) {
+            MovingObjectPosition bucket = FreecamTarget.pickBlock(player, selection.rayStart, selection.rayEnd,
+                    FreecamActions.emptyBucket(held));
+            if (bucket != null) sendAction(FreecamActions.USE_BUCKET, bucket);
+            return;
+        }
+        if (hit != null && hit.entityHit != null) {
+            sendAction(FreecamActions.INTERACT);
+            player.swingItem();
+            return;
+        }
         if (hit == null || MC.theWorld.getBlock(hit.blockX, hit.blockY, hit.blockZ).isAir(MC.theWorld, hit.blockX, hit.blockY, hit.blockZ)) return;
         ItemStack item = player.inventory.getCurrentItem();
         int size = item == null ? 0 : item.stackSize;

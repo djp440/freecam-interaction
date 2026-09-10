@@ -7,7 +7,7 @@ import net.minecraft.launchwrapper.IClassTransformer;
 import org.objectweb.asm.*;
 import org.objectweb.asm.tree.*;
 
-/** 定点修改声音加载，并把原版及第三方容器的玩家距离检查路由到模式范围。 */
+/** 定点修改声音加载，并把原版、第三方容器及村民交易AI的玩家距离检查路由到模式范围。 */
 public final class FreecamTransformer implements IClassTransformer {
     private static final Set<String> DISTANCE_CONTAINERS = new HashSet<String>(Arrays.asList(
             "net.minecraft.tileentity.TileEntityHopper",
@@ -23,6 +23,12 @@ public final class FreecamTransformer implements IClassTransformer {
 
     public byte[] transform(String name, String transformedName, byte[] bytes) {
         if (bytes == null) return null;
+        if (transformedName.equals("net.minecraft.entity.ai.EntityAITradePlayer")) {
+            return patchTradeAi(bytes);
+        }
+        if (transformedName.equals("net.minecraft.item.ItemBucket")) {
+            return patchBucketTarget(bytes);
+        }
         boolean vanillaContainer = DISTANCE_CONTAINERS.contains(transformedName);
         if (vanillaContainer || hasContainerMethod(bytes)) return patchContainerDistance(transformedName, bytes, vanillaContainer);
         if (!transformedName.equals("net.minecraft.client.audio.SoundManager")) return bytes;
@@ -36,7 +42,6 @@ public final class FreecamTransformer implements IClassTransformer {
                 if (!(insn instanceof MethodInsnNode)) continue;
                 MethodInsnNode call = (MethodInsnNode) insn;
                 if (call.owner.equals("java/lang/Thread") && call.name.equals("start") && call.desc.equals("()V")) {
-                    // 在原有 synchronized 方法内完成加载，关闭 loaded 尚未置位时的重入窗口。
                     call.name = "run";
                     changed++;
                 }
@@ -44,6 +49,61 @@ public final class FreecamTransformer implements IClassTransformer {
         }
         if (changed != 1) throw new IllegalStateException("Freecam SoundManager patch expected 1 site, got " + changed);
         System.out.println("[Freecam] SoundManager initialization serialized");
+        ClassWriter writer = new ClassWriter(0);
+        node.accept(writer);
+        return writer.toByteArray();
+    }
+
+    private byte[] patchBucketTarget(byte[] bytes) {
+        ClassNode node = new ClassNode();
+        new ClassReader(bytes).accept(node, 0);
+        int changed = 0;
+        for (MethodNode method : node.methods) {
+            if (!method.name.equals("onItemRightClick") && !method.name.equals("func_77659_a")) continue;
+            for (AbstractInsnNode insn : method.instructions.toArray()) {
+                if (!(insn instanceof MethodInsnNode)) continue;
+                MethodInsnNode call = (MethodInsnNode) insn;
+                if ((call.name.equals("getMovingObjectPositionFromPlayer") || call.name.equals("func_77621_a"))
+                        && call.desc.equals("(Lnet/minecraft/world/World;Lnet/minecraft/entity/player/EntityPlayer;Z)Lnet/minecraft/util/MovingObjectPosition;")) {
+                    InsnList hook = new InsnList();
+                    hook.add(new VarInsnNode(Opcodes.ALOAD, 3));
+                    hook.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "local/freecaminteraction/FreecamActions", "bucketHit",
+                            "(Lnet/minecraft/util/MovingObjectPosition;Lnet/minecraft/entity/player/EntityPlayer;)Lnet/minecraft/util/MovingObjectPosition;", false));
+                    method.instructions.insert(call, hook);
+                    changed++;
+                }
+            }
+        }
+        if (changed != 1) throw new IllegalStateException("Freecam ItemBucket target patch expected 1 site, got " + changed);
+        System.out.println("[Freecam] ItemBucket target patched");
+        ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+        node.accept(writer);
+        return writer.toByteArray();
+    }
+
+    private byte[] patchTradeAi(byte[] bytes) {
+        ClassNode node = new ClassNode();
+        new ClassReader(bytes).accept(node, 0);
+        int changed = 0;
+        for (MethodNode method : node.methods) {
+            if (!method.name.equals("shouldExecute") && !method.name.equals("func_75250_a")) continue;
+            for (AbstractInsnNode insn : method.instructions.toArray()) {
+                if (insn instanceof MethodInsnNode) {
+                    MethodInsnNode call = (MethodInsnNode) insn;
+                    if ((call.name.equals("getDistanceSqToEntity") || call.name.equals("func_70068_e"))
+                            && call.desc.equals("(Lnet/minecraft/entity/Entity;)D")) {
+                        call.setOpcode(Opcodes.INVOKESTATIC);
+                        call.owner = "local/freecaminteraction/FreecamInteraction";
+                        call.name = "distanceToEntity";
+                        call.desc = "(Lnet/minecraft/entity/Entity;Lnet/minecraft/entity/Entity;)D";
+                        call.itf = false;
+                        changed++;
+                    }
+                }
+            }
+        }
+        if (changed != 1) throw new IllegalStateException("Freecam Trade AI patch expected 1 site, got " + changed);
+        System.out.println("[Freecam] EntityAITradePlayer distance check patched");
         ClassWriter writer = new ClassWriter(0);
         node.accept(writer);
         return writer.toByteArray();

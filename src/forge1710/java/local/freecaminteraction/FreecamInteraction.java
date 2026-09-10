@@ -13,6 +13,7 @@ import cpw.mods.fml.common.network.NetworkRegistry;
 import cpw.mods.fml.common.network.simpleimpl.*;
 import cpw.mods.fml.relauncher.Side;
 import io.netty.buffer.ByteBuf;
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraftforge.common.MinecraftForge;
@@ -30,9 +31,10 @@ public final class FreecamInteraction {
     private static final Map<EntityPlayerMP, State> ACTIVE = new HashMap<EntityPlayerMP, State>();
 
     public static void initialize() {
-        channel = NetworkRegistry.INSTANCE.newSimpleChannel("freecam1710");
+        channel = NetworkRegistry.INSTANCE.newSimpleChannel("freecam1710v2");
         channel.registerMessage(ServerMode.class, ModeRequest.class, 0, Side.SERVER);
         channel.registerMessage(ClientMode.class, ModeAck.class, 1, Side.CLIENT);
+        FreecamActions.initialize(channel);
         FreecamInteraction events = new FreecamInteraction();
         FMLCommonHandler.instance().bus().register(events);
         MinecraftForge.EVENT_BUS.register(events);
@@ -43,12 +45,12 @@ public final class FreecamInteraction {
         if (available && channel != null) channel.sendToServer(new ModeRequest(++clientEpoch, enabled));
     }
 
-    private static boolean active(EntityPlayer player) {
+    public static boolean active(EntityPlayer player) {
         State state = ACTIVE.get(player);
         return state != null && state.dimension == player.dimension && player.isEntityAlive() && !player.isPlayerSleeping();
     }
 
-    private static boolean inside(EntityPlayer player, int x, int y, int z) {
+    public static boolean inside(EntityPlayer player, int x, int y, int z) {
         return y >= 0 && y < player.worldObj.getHeight() && player.worldObj.blockExists(x, y, z)
                 && FreecamRange.contains(player.posX, player.boundingBox.minY, player.posZ, x, y, z);
     }
@@ -60,6 +62,16 @@ public final class FreecamInteraction {
         double deltaY = player.posY - y;
         double deltaZ = player.posZ - z;
         return deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ;
+    }
+
+    public static double distanceToEntity(Entity entityA, Entity entityB) {
+        if (entityB instanceof EntityPlayer && active((EntityPlayer) entityB) && FreecamTarget.allowed((EntityPlayer) entityB, entityA)) {
+            return 0.0D;
+        }
+        if (entityA instanceof EntityPlayer && active((EntityPlayer) entityA) && FreecamTarget.allowed((EntityPlayer) entityA, entityB)) {
+            return 0.0D;
+        }
+        return entityA.getDistanceSqToEntity(entityB);
     }
 
     private static void cancelMining(EntityPlayerMP player) {
@@ -78,6 +90,7 @@ public final class FreecamInteraction {
 
     private static void clear(EntityPlayerMP player) {
         PENDING.remove(player);
+        FreecamActions.clear(player);
         State state = ACTIVE.remove(player);
         cancelMining(player);
         if (state != null) player.theItemInWorldManager.setBlockReachDistance(state.previousReach);
@@ -87,6 +100,8 @@ public final class FreecamInteraction {
     public void interact(PlayerInteractEvent event) {
         if (event.world.isRemote || !ACTIVE.containsKey(event.entityPlayer)) return;
         EntityPlayerMP player = (EntityPlayerMP) event.entityPlayer;
+        if (active(player) && FreecamActions.authorized == player && FreecamActions.fishing
+                && event.action == PlayerInteractEvent.Action.RIGHT_CLICK_AIR) return;
         if (event.action == PlayerInteractEvent.Action.RIGHT_CLICK_AIR || event.face < 0 || event.face > 5 || !active(player)
                 || !inside(player, event.x, event.y, event.z)) {
             event.setCanceled(true);
@@ -121,12 +136,16 @@ public final class FreecamInteraction {
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void attackEntity(AttackEntityEvent event) {
-        if (!event.entityPlayer.worldObj.isRemote && ACTIVE.containsKey(event.entityPlayer)) event.setCanceled(true);
+        if (!event.entityPlayer.worldObj.isRemote && ACTIVE.containsKey(event.entityPlayer)
+                && (FreecamActions.authorized != event.entityPlayer || !active(event.entityPlayer)
+                    || !FreecamTarget.allowed(event.entityPlayer, event.target))) event.setCanceled(true);
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void interactEntity(EntityInteractEvent event) {
-        if (!event.entityPlayer.worldObj.isRemote && ACTIVE.containsKey(event.entityPlayer)) event.setCanceled(true);
+        if (!event.entityPlayer.worldObj.isRemote && ACTIVE.containsKey(event.entityPlayer)
+                && (FreecamActions.authorized != event.entityPlayer || !active(event.entityPlayer)
+                    || !FreecamTarget.allowed(event.entityPlayer, event.target))) event.setCanceled(true);
     }
 
     @SubscribeEvent
@@ -152,7 +171,7 @@ public final class FreecamInteraction {
 
     @SubscribeEvent
     public void registration(FMLNetworkEvent.CustomPacketRegistrationEvent<?> event) {
-        if (event.side == Side.CLIENT && event.registrations.contains("freecam1710")) {
+        if (event.side == Side.CLIENT && event.registrations.contains("freecam1710v2")) {
             available = event.operation.equals("REGISTER");
             ModLog.info("Server interaction channel=" + available);
         }

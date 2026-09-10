@@ -20,20 +20,21 @@ try {
     Use-ProjectJava
     $gradleTasks = @($tasks[$Action])
     if ($Action -eq 'smoke') { $gradleTasks += 'interactionCheck' }
-    & ./gradlew.bat @gradleTasks --console=plain
+    & ./gradlew.bat -p tooling/neoforge @gradleTasks --console=plain
     if ($LASTEXITCODE -ne 0) { throw "Gradle $Action 失败，退出码 $LASTEXITCODE；检查日志后可重试。" }
     if ($Action -eq 'smoke') {
-        & java -ea --class-path 'build/classes/java/main' 'scripts/CameraMotionCheck.java'
+        & java -ea --class-path 'tooling/neoforge/build/classes/java/main' 'scripts/CameraMotionCheck.java'
         if ($LASTEXITCODE -ne 0) { throw '相机运动逻辑自检失败。' }
         Add-Type -AssemblyName System.IO.Compression.FileSystem
-        $jar = Join-Path $ProjectRoot 'build/libs/freecam_interaction-0.1.0.jar'
+        $jar = Join-Path $ProjectRoot 'tooling/neoforge/build/libs/freecam_interaction-0.1.0.jar'
         $archive = [System.IO.Compression.ZipFile]::OpenRead($jar)
         try {
             foreach ($entry in @('local/freecaminteraction/FreecamInteractionMod.class', 'local/freecaminteraction/ModLog.class',
                     'local/freecaminteraction/client/FreecamClient.class', 'local/freecaminteraction/client/FreecamClient$Registration.class',
                     'local/freecaminteraction/client/FreecamSession.class', 'local/freecaminteraction/client/FreecamMotion.class',
                     'local/freecaminteraction/FreecamInteraction.class', 'local/freecaminteraction/client/FreecamSelection.class',
-                    'local/freecaminteraction/mixin/PlayerMixin.class', 'local/freecaminteraction/mixin/MinecraftMixin.class',
+                    'local/freecaminteraction/mixin/PlayerMixin.class', 'local/freecaminteraction/mixin/ItemMixin.class',
+                    'local/freecaminteraction/mixin/MinecraftMixin.class',
                     'freecam_interaction.mixins.json', 'META-INF/accesstransformer.cfg', 'assets/freecam_interaction/lang/zh_cn.json',
                     'assets/freecam_interaction/lang/en_us.json', 'META-INF/neoforge.mods.toml')) {
                 if (!$archive.GetEntry($entry)) { throw "JAR 缺少 $entry" }

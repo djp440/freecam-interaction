@@ -50,7 +50,9 @@ try {
         $runLock = [System.IO.File]::Open((Join-Path $ProjectRoot 'run/.forge1710.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
     }
     $tasks = @{ setup = '--version'; check = '--version'; build = 'build'; client = 'runClient'; server = 'runServer'; smoke = 'build' }
-    & ./gradlew.bat $tasks[$Action] --console=plain
+    $gradleTasks = @($tasks[$Action])
+    if ($Action -eq 'smoke') { $gradleTasks += 'actionCheck' }
+    & ./gradlew.bat @gradleTasks --console=plain
     if ($LASTEXITCODE -ne 0) { throw "Forge 1.7.10 $Action 失败：$LASTEXITCODE" }
     if ($Action -eq 'smoke') {
         New-Item -ItemType Directory -Path build/checks -Force | Out-Null

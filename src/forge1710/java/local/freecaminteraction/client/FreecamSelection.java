@@ -3,6 +3,7 @@ package local.freecaminteraction.client;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import local.freecaminteraction.FreecamRange;
+import local.freecaminteraction.FreecamTarget;
 import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderGlobal;
@@ -22,6 +23,7 @@ public final class FreecamSelection {
     private final IntBuffer viewport = BufferUtils.createIntBuffer(16);
     private final FloatBuffer point = BufferUtils.createFloatBuffer(4);
     public MovingObjectPosition hit;
+    public Vec3 rayStart, rayEnd;
 
     public void render(EntityLivingBase camera, boolean selecting) {
         Minecraft mc = Minecraft.getMinecraft();
@@ -39,10 +41,9 @@ public final class FreecamSelection {
                     end = start.addVector((end.xCoord - start.xCoord) * 256 / length,
                             (end.yCoord - start.yCoord) * 256 / length,
                             (end.zCoord - start.zCoord) * 256 / length);
-                    MovingObjectPosition candidate = mc.theWorld.rayTraceBlocks(start, end);
-                    if (candidate != null && candidate.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK
-                            && FreecamRange.contains(mc.thePlayer.posX, mc.thePlayer.boundingBox.minY, mc.thePlayer.posZ,
-                                    candidate.blockX, candidate.blockY, candidate.blockZ)) hit = candidate;
+                    rayStart = start;
+                    rayEnd = end;
+                    hit = FreecamTarget.pick(mc.thePlayer, start, end);
                 }
             }
         }
@@ -64,13 +65,22 @@ public final class FreecamSelection {
             GL11.glColor4f(0.65F, 0.95F, 0.9F, 0.35F);
             RenderGlobal.drawOutlinedBoundingBox(AxisAlignedBB.getBoundingBox(x, y, z, x + 16, y + 16, z + 16), -1);
             if (hit != null) {
-                Block block = mc.theWorld.getBlock(hit.blockX, hit.blockY, hit.blockZ);
-                block.setBlockBoundsBasedOnState(mc.theWorld, hit.blockX, hit.blockY, hit.blockZ);
-                AxisAlignedBB bounds = block.getSelectedBoundingBoxFromPool(mc.theWorld, hit.blockX, hit.blockY, hit.blockZ);
-                if (bounds != null) {
-                    GL11.glLineWidth(2.0F);
-                    GL11.glColor4f(0.8F, 1.0F, 0.95F, 0.8F);
-                    RenderGlobal.drawOutlinedBoundingBox(bounds.expand(0.002, 0.002, 0.002), -1);
+                if (hit.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
+                    Block block = mc.theWorld.getBlock(hit.blockX, hit.blockY, hit.blockZ);
+                    block.setBlockBoundsBasedOnState(mc.theWorld, hit.blockX, hit.blockY, hit.blockZ);
+                    AxisAlignedBB bounds = block.getSelectedBoundingBoxFromPool(mc.theWorld, hit.blockX, hit.blockY, hit.blockZ);
+                    if (bounds != null) {
+                        GL11.glLineWidth(2.0F);
+                        GL11.glColor4f(0.8F, 1.0F, 0.95F, 0.8F);
+                        RenderGlobal.drawOutlinedBoundingBox(bounds.expand(0.002, 0.002, 0.002), -1);
+                    }
+                } else if (hit.typeOfHit == MovingObjectPosition.MovingObjectType.ENTITY && hit.entityHit != null) {
+                    AxisAlignedBB bounds = hit.entityHit.boundingBox;
+                    if (bounds != null) {
+                        GL11.glLineWidth(2.0F);
+                        GL11.glColor4f(1.0F, 0.4F, 0.4F, 0.85F);
+                        RenderGlobal.drawOutlinedBoundingBox(bounds.expand(0.02, 0.02, 0.02), -1);
+                    }
                 }
             }
         } finally {

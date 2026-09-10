@@ -36,6 +36,7 @@ public final class FreecamInteraction {
             ACTIVE.put(player, player.level().dimension());
         } else {
             ACTIVE.remove(player);
+            FreecamActions.clear(player);
         }
         ModLog.LOGGER.info("Freecam interaction mode={}; player={}; side={}", active(player),
                 player.getUUID(), player.level().isClientSide ? "client" : "server");
@@ -63,6 +64,8 @@ public final class FreecamInteraction {
 
         @SubscribeEvent
         public static void register(RegisterPayloadHandlersEvent event) {
+            event.registrar("1").optional().playToServer(FreecamActions.Action.TYPE, FreecamActions.Action.CODEC,
+                    (message, context) -> { if (context.player() instanceof ServerPlayer player) FreecamActions.handle(player, message); });
             event.registrar("1").optional().playToServer(Mode.TYPE, Mode.CODEC, (message, context) -> {
                 if (context.player() instanceof ServerPlayer player) {
                     setActive(player, message.enabled());

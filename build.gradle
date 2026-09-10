@@ -30,6 +30,21 @@ tasks.register('prepareNativeCache', Copy) {
     from layout.projectDirectory.dir('run/natives/lwjgl2')
     into nativeCache
 }
+def compileActionCheck = tasks.register('compileActionCheck', JavaCompile) {
+    dependsOn tasks.named('classes')
+    source = files('scripts/LegacyActionCheck.java')
+    classpath = sourceSets.main.runtimeClasspath + sourceSets.main.compileClasspath
+    destinationDirectory = layout.buildDirectory.dir('action-checks')
+    javaCompiler = javaToolchains.compilerFor { languageVersion = JavaLanguageVersion.of(8) }
+}
+tasks.register('actionCheck', JavaExec) {
+    dependsOn tasks.named('classes'), compileActionCheck
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(8) }
+    classpath = files(layout.buildDirectory.dir('action-checks')) + sourceSets.main.runtimeClasspath + sourceSets.main.compileClasspath
+    mainClass = 'LegacyActionCheck'
+    jvmArgs '-ea', '-Dfile.encoding=UTF-8'
+}
+
 tasks.named('runClient') {
     dependsOn 'prepareNativeCache'
     systemProperty 'org.lwjgl.librarypath', nativeCache.absolutePath

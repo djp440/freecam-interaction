@@ -53,7 +53,28 @@ class InteractionCheck {
         assert area(FreecamGeometry.faces(List.of(slab, step), 1, 1, 1)) == 0.5;
         assert FreecamGeometry.faces(List.of(slab, step), 1, -1, 0.5).isEmpty();
         assert FreecamGeometry.faces(List.of(), 1, 1, 1).isEmpty();
-        System.out.println("Interaction checks passed: range edges, negative coordinates, invalid values, rays and exposed cube/slab/stair faces.");
+        var buffer = io.netty.buffer.Unpooled.buffer();
+        try {
+            var origin = new Vec3(1, 2, 3);
+            var action = new local.freecaminteraction.FreecamActions.Action(2, 8, -1, origin, Vec3.ZERO, Vec3.ZERO);
+            local.freecaminteraction.FreecamActions.Action.CODEC.encode(buffer, action);
+            assert buffer.readableBytes() == 84;
+            assert local.freecaminteraction.FreecamActions.Action.CODEC.decode(buffer).equals(action);
+            try {
+                local.freecaminteraction.FreecamActions.Action.CODEC.decode(buffer);
+                throw new AssertionError("Truncated action accepted");
+            } catch (IndexOutOfBoundsException expected) {}
+            assert local.freecaminteraction.FreecamTarget.pick(null, null, origin) == null;
+            assert local.freecaminteraction.FreecamTarget.pickBlock(null, null, origin,
+                    net.minecraft.world.level.ClipContext.Fluid.NONE) == null;
+            assert local.freecaminteraction.FreecamActions.bucketTarget(null) == null;
+            assert local.freecaminteraction.FreecamTarget.pick(null, origin, origin) == null;
+            assert local.freecaminteraction.FreecamTarget.pick(null, origin, new Vec3(Double.NaN, 0, 0)) == null;
+            assert local.freecaminteraction.FreecamTarget.pick(null, origin, new Vec3(1000, 0, 0)) == null;
+            assert FreecamRange.contains(0, 0, 0, -8.5, -0.5, -0.5);
+            assert !FreecamRange.contains(0, 0, 0, 7.5, -0.5, -0.5);
+        } finally { buffer.release(); }
+        System.out.println("Interaction checks passed: range, rays, exposed faces, action codec and invalid payloads.");
     }
 
     private static double area(List<double[]> faces) {

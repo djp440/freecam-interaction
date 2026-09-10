@@ -9,16 +9,21 @@ import local.freecaminteraction.FreecamInteractionMod;
 import local.freecaminteraction.FreecamGeometry;
 import local.freecaminteraction.FreecamInteraction;
 import local.freecaminteraction.FreecamRange;
+import local.freecaminteraction.FreecamTarget;
 import local.freecaminteraction.ModLog;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.BucketItem;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -32,6 +37,8 @@ public final class FreecamSelection {
     private static Matrix4f inverseViewProjection;
     private static Vec3 cameraPosition;
     private static BlockHitResult selected;
+    private static EntityHitResult entityTarget;
+    private static Vec3 rayEnd;
     private static BlockPos mining;
     private static boolean blockedUntilRelease;
     private static int viewportWidth;
@@ -41,9 +48,54 @@ public final class FreecamSelection {
 
     public static BlockHitResult target() { return selected; }
 
+    public static boolean hasTarget() { return selected != null || entityTarget != null; }
+    public static boolean holdingRod() {
+        return Minecraft.getInstance().player.getMainHandItem().getItem() instanceof net.minecraft.world.item.FishingRodItem;
+    }
+    public static boolean canRetrieve() { return holdingRod() && Minecraft.getInstance().player.fishing != null; }
+
+    public static boolean customBucket(InteractionHand hand) {
+        Minecraft client = Minecraft.getInstance();
+        if (!(client.player.getItemInHand(hand).getItem() instanceof BucketItem bucket)) return false;
+        if (blockedUntilRelease || !FreecamClient.canBuild() || cameraPosition == null || rayEnd == null) return true;
+        if (!client.getConnection().hasChannel(local.freecaminteraction.FreecamActions.Action.TYPE)) {
+            client.player.displayClientMessage(net.minecraft.network.chat.Component.translatable("screen.freecam_interaction.unsupported"), true);
+            return true;
+        }
+        BlockHitResult hit = FreecamTarget.pickBlock(client.player, cameraPosition, rayEnd,
+                bucket.content == Fluids.EMPTY ? ClipContext.Fluid.SOURCE_ONLY : ClipContext.Fluid.NONE);
+        if (hit == null) return true;
+        client.getConnection().send(new net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket(client.player.getInventory().selected));
+        net.neoforged.neoforge.network.PacketDistributor.sendToServer(new local.freecaminteraction.FreecamActions.Action(
+                local.freecaminteraction.FreecamActions.USE_BUCKET, client.player.getInventory().selected, hand.ordinal(),
+                cameraPosition, rayEnd, hit.getLocation()));
+        return true;
+    }
+
+    public static boolean customAction(boolean attack) {
+        Minecraft client = Minecraft.getInstance();
+        boolean rod = !attack && holdingRod();
+        if (!rod && entityTarget == null) return false;
+        if (blockedUntilRelease || !FreecamClient.canBuild()) return true;
+        if (!client.getConnection().hasChannel(local.freecaminteraction.FreecamActions.Action.TYPE)) {
+            client.player.displayClientMessage(net.minecraft.network.chat.Component.translatable("screen.freecam_interaction.unsupported"), true);
+            return true;
+        }
+        if ((!hasTarget() && !canRetrieve()) || cameraPosition == null || rayEnd == null) return true;
+        client.getConnection().send(new net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket(client.player.getInventory().selected));
+        HitResult hit = entityTarget != null ? entityTarget : selected;
+        net.neoforged.neoforge.network.PacketDistributor.sendToServer(new local.freecaminteraction.FreecamActions.Action(
+                attack ? 0 : rod ? 2 : 1, client.player.getInventory().selected,
+                entityTarget == null ? -1 : entityTarget.getEntity().getId(), cameraPosition, rayEnd,
+                hit == null ? rayEnd : hit.getLocation()));
+        return true;
+    }
+
     public static void reset() {
         inverseViewProjection = null;
         selected = null;
+        entityTarget = null;
+        rayEnd = null;
         mining = null;
         blockedUntilRelease = true;
     }
@@ -87,7 +139,7 @@ public final class FreecamSelection {
                 client.gameMode.stopDestroyBlock();
                 mining = null;
             }
-            if (selected == null) {
+            if (!hasTarget() && !canRetrieve()) {
                 client.options.keyAttack.setDown(false);
                 client.options.keyUse.setDown(false);
                 while (client.options.keyAttack.consumeClick()) {}
@@ -125,6 +177,7 @@ public final class FreecamSelection {
     public static void pick() {
         Minecraft client = Minecraft.getInstance();
         selected = null;
+        entityTarget = null;
         if (FreecamClient.canBuild() && inverseViewProjection != null
                 && viewportWidth == client.getWindow().getWidth() && viewportHeight == client.getWindow().getHeight()) {
             float mouseX = (float) (client.mouseHandler.xpos() / client.getWindow().getScreenWidth() * 2 - 1);
@@ -136,16 +189,16 @@ public final class FreecamSelection {
             AABB range = new AABB(client.player.position(), client.player.position()).inflate(8.5);
             if (Double.isFinite(direction.x) && Double.isFinite(direction.y) && Double.isFinite(direction.z)
                     && (range.contains(cameraPosition) || range.clip(cameraPosition, end).isPresent())) {
-                BlockHitResult hit = client.level.clip(new ClipContext(cameraPosition, end,
-                        ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, client.player));
-                if (hit.getType() == HitResult.Type.BLOCK && FreecamInteraction.allowed(client.player, hit.getBlockPos())) {
-                    selected = hit;
-                }
+                rayEnd = end;
+                HitResult hit = local.freecaminteraction.FreecamTarget.pick(client.player, cameraPosition, end);
+                if (hit instanceof BlockHitResult block) selected = block;
+                else if (hit instanceof EntityHitResult entity
+                        && client.getConnection().hasChannel(local.freecaminteraction.FreecamActions.Action.TYPE)) entityTarget = entity;
             }
         }
-        client.hitResult = selected != null ? selected : BlockHitResult.miss(
+        client.hitResult = entityTarget != null ? entityTarget : selected != null ? selected : BlockHitResult.miss(
                 client.player == null ? Vec3.ZERO : client.player.position(), Direction.UP, BlockPos.ZERO);
-        client.crosshairPickEntity = null;
+        client.crosshairPickEntity = entityTarget == null ? null : entityTarget.getEntity();
     }
 
     @SubscribeEvent
