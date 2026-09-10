@@ -1,5 +1,7 @@
 # 项目说明
 
+- 法杖材质（2026-09-10）：`src/forge1710/resources/assets/freecam_interaction/textures/items/wand_{normal,advanced,creative}.png` 为32×32透明PNG，强调色依次蓝、红、紫。原图/提示词/预览在 `art/wands`；导出检查使用 `scripts/wand-textures.ps1`。
+
 - 法杖系统（2026-09-10）：已按 `PLAN-wands-1710.md` 完成实现并通过冒烟验证。普通法杖（5×5区块/2048耐久/钻石修复）、高级法杖（7×7区块/8192耐久/钻石块修复）、创造法杖（9×9区块/无限耐久）；具备耐久<=1保底不损毁、耐久2->1自动背包选取接续（创造>高级>普通，同级按槽位）、有效操作动作扣费、ForgeChunkManager票据与PlayerManager区块订阅保载。1.21.1 对应功能待实现。
 
 Minecraft 1.21.1 / NeoForge 与 Forge 1.7.10 的“自由视角交互”Mod，已实现高位第三人称观察与范围内光标建造交互。使用简体中文和 UTF-8。
