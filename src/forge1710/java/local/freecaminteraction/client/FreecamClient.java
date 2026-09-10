@@ -31,6 +31,7 @@ import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.MathHelper;
 import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.util.MovementInput;
+import net.minecraft.util.Vec3;
 import net.minecraftforge.client.event.MouseEvent;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import net.minecraftforge.common.MinecraftForge;
@@ -47,6 +48,7 @@ public final class FreecamClient {
     private static final KeyBinding TOGGLE = new KeyBinding("key.freecam_interaction.enter", Keyboard.KEY_G, "key.categories.freecam_interaction");
     private static final Field DISTANCE = ReflectionHelper.findField(EntityRenderer.class, "thirdPersonDistance", "field_78490_B");
     private static final Field PREVIOUS_DISTANCE = ReflectionHelper.findField(EntityRenderer.class, "thirdPersonDistanceTemp", "field_78491_C");
+    private static FreecamClient instance;
     private EntityClientPlayerMP player;
     private EntityOtherPlayerMP camera;
     private MovementInput previousInput;
@@ -64,11 +66,22 @@ public final class FreecamClient {
     private final FreecamSelection selection = new FreecamSelection();
 
     public static void initialize() {
-        FreecamClient events = new FreecamClient();
+        instance = new FreecamClient();
         ClientRegistry.registerKeyBinding(TOGGLE);
-        FMLCommonHandler.instance().bus().register(events);
-        MinecraftForge.EVENT_BUS.register(events);
+        FMLCommonHandler.instance().bus().register(instance);
+        MinecraftForge.EVENT_BUS.register(instance);
         ModLog.info("Client initialized; lwjgl=" + Sys.getVersion() + "; librarypath=" + System.getProperty("org.lwjgl.librarypath"));
+    }
+
+    public static boolean isFreecamActive() {
+        return instance != null && instance.current();
+    }
+
+    public static MovingObjectPosition cameraRayTrace(net.minecraft.world.World world, Vec3 start, Vec3 end) {
+        if (isFreecamActive()) {
+            return null;
+        }
+        return world.rayTraceBlocks(start, end);
     }
 
     private boolean current() {
@@ -119,6 +132,13 @@ public final class FreecamClient {
         leftMining = false;
         modeRequested = false;
         requestMode();
+        if (!local.freecaminteraction.core.FreecamTransformer.entityRendererPatched) {
+            ModLog.info("Warning: EntityRenderer orientCamera patch not yet applied or missing");
+        }
+        Vec3 initCam = FreecamCollision.cameraPos(camera.posX, camera.posY, camera.posZ, camera.rotationYaw, camera.rotationPitch);
+        if (!FreecamCollision.isCameraClear(MC.theWorld, initCam.xCoord, initCam.yCoord, initCam.zCoord)) {
+            ModLog.info("Initial camera position partially obstructed at " + initCam.xCoord + "," + initCam.yCoord + "," + initCam.zCoord);
+        }
         ModLog.info("Camera entered; player=" + player.posX + "," + player.posY + "," + player.posZ);
     }
 
@@ -275,8 +295,12 @@ public final class FreecamClient {
             MC.setIngameNotInFocus();
             player.movementInput.sneak = down(MC.gameSettings.keyBindSneak);
             if (rotate && dragging) {
-                camera.rotationYaw = MathHelper.wrapAngleTo180_float(camera.rotationYaw + (x - mouseX) * 0.2F);
-                camera.rotationPitch = MathHelper.clamp_float(camera.rotationPitch - (y - mouseY) * 0.2F, -85, 85);
+                float targetYaw = MathHelper.wrapAngleTo180_float(camera.rotationYaw + (x - mouseX) * 0.2F);
+                float targetPitch = MathHelper.clamp_float(camera.rotationPitch - (y - mouseY) * 0.2F, -85, 85);
+                float[] safeRot = FreecamCollision.solveRotation(MC.theWorld, camera.posX, camera.posY, camera.posZ,
+                        camera.rotationYaw, camera.rotationPitch, targetYaw, targetPitch);
+                camera.rotationYaw = safeRot[0];
+                camera.rotationPitch = safeRot[1];
             }
             double forward = (down(MC.gameSettings.keyBindForward) ? 1 : 0) - (down(MC.gameSettings.keyBindBack) ? 1 : 0);
             double right = (down(MC.gameSettings.keyBindRight) ? 1 : 0) - (down(MC.gameSettings.keyBindLeft) ? 1 : 0);
@@ -284,38 +308,22 @@ public final class FreecamClient {
                     - (down(MC.gameSettings.keyBindSprint) || isKeyDown(Keyboard.KEY_LCONTROL) || isKeyDown(Keyboard.KEY_RCONTROL) ? 1 : 0);
             double[] offset = FreecamMotion.pan(camera.rotationYaw, forward, right, elapsed);
             double yOffset = FreecamMotion.vertical(up, elapsed);
-            double nextX = FreecamRange.clampCamera(player.posX, camera.posX + offset[0]);
-            double nextY = FreecamRange.clampCamera(player.posY, camera.posY + yOffset);
-            double nextZ = FreecamRange.clampCamera(player.posZ, camera.posZ + offset[1]);
-            if (yOffset < 0) {
-                nextY = Math.max(nextY, getDropFloor(nextX, camera.posY, nextZ));
-            }
-            camera.setPosition(nextX, nextY, nextZ);
+            double targetAnchorX = FreecamRange.clampCamera(player.posX, camera.posX + offset[0]);
+            double targetAnchorY = FreecamRange.clampCamera(player.posY, camera.posY + yOffset);
+            double targetAnchorZ = FreecamRange.clampCamera(player.posZ, camera.posZ + offset[1]);
+            double deltaX = targetAnchorX - camera.posX;
+            double deltaY = targetAnchorY - camera.posY;
+            double deltaZ = targetAnchorZ - camera.posZ;
+
+            Vec3 camPos = FreecamCollision.cameraPos(camera.posX, camera.posY, camera.posZ, camera.rotationYaw, camera.rotationPitch);
+            double[] accepted = FreecamCollision.solveTranslation(MC.theWorld, camPos.xCoord, camPos.yCoord, camPos.zCoord, deltaX, deltaY, deltaZ);
+            camera.setPosition(camera.posX + accepted[0], camera.posY + accepted[1], camera.posZ + accepted[2]);
             syncCamera();
         }
         if (dragging != rotate) ModLog.info("Camera dragging=" + rotate + "; yaw=" + camera.rotationYaw + "; pitch=" + camera.rotationPitch);
         dragging = rotate;
         mouseX = x;
         mouseY = y;
-    }
-
-    private static double getDropFloor(double x, double startY, double z) {
-        if (MC.theWorld == null) return -29999984.0;
-        int blockX = MathHelper.floor_double(x);
-        int blockZ = MathHelper.floor_double(z);
-        if (!MC.theWorld.blockExists(blockX, 64, blockZ)) return -29999984.0;
-        int fromY = MathHelper.clamp_int(MathHelper.floor_double(startY), 0, 255);
-        for (int by = fromY; by >= 0; by--) {
-            Block block = MC.theWorld.getBlock(blockX, by, blockZ);
-            if (block == null || block.isAir(MC.theWorld, blockX, by, blockZ)) continue;
-            Material material = block.getMaterial();
-            if (material.isSolid() || material.isLiquid()) {
-                AxisAlignedBB box = block.getCollisionBoundingBoxFromPool(MC.theWorld, blockX, by, blockZ);
-                if (box != null) return box.maxY;
-                return by + 1.0;
-            }
-        }
-        return 0.0;
     }
 
     private static boolean isKeyDown(int code) {

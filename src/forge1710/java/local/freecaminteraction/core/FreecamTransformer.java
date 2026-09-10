@@ -21,8 +21,13 @@ public final class FreecamTransformer implements IClassTransformer {
             "net.minecraft.inventory.ContainerRepair",
             "net.minecraft.inventory.ContainerWorkbench"));
 
+    public static volatile boolean entityRendererPatched = false;
+
     public byte[] transform(String name, String transformedName, byte[] bytes) {
         if (bytes == null) return null;
+        if (transformedName.equals("net.minecraft.client.renderer.EntityRenderer")) {
+            return patchEntityRenderer(bytes);
+        }
         if (transformedName.equals("net.minecraft.entity.ai.EntityAITradePlayer")) {
             return patchTradeAi(bytes);
         }
@@ -169,6 +174,36 @@ public final class FreecamTransformer implements IClassTransformer {
         if (required && changed != 1) throw new IllegalStateException("Freecam container distance patch expected 1 site in " + className + ", got " + changed);
         if (changed == 0) return bytes;
         System.out.println("[Freecam] Container distance patched: " + className);
+        ClassWriter writer = new ClassWriter(0);
+        node.accept(writer);
+        return writer.toByteArray();
+    }
+
+    private byte[] patchEntityRenderer(byte[] bytes) {
+        ClassNode node = new ClassNode();
+        new ClassReader(bytes).accept(node, 0);
+        int changed = 0;
+        for (MethodNode method : node.methods) {
+            if (!method.name.equals("orientCamera") && !method.name.equals("func_78467_g")) continue;
+            for (AbstractInsnNode insn : method.instructions.toArray()) {
+                if (!(insn instanceof MethodInsnNode)) continue;
+                MethodInsnNode call = (MethodInsnNode) insn;
+                if ((call.name.equals("rayTraceBlocks") || call.name.equals("func_72933_a"))
+                        && (call.owner.equals("net/minecraft/client/multiplayer/WorldClient") || call.owner.equals("bjf")
+                        || call.owner.equals("net/minecraft/world/World") || call.owner.equals("ahb"))
+                        && call.desc.equals("(Lnet/minecraft/util/Vec3;Lnet/minecraft/util/Vec3;)Lnet/minecraft/util/MovingObjectPosition;")) {
+                    call.setOpcode(Opcodes.INVOKESTATIC);
+                    call.owner = "local/freecaminteraction/client/FreecamClient";
+                    call.name = "cameraRayTrace";
+                    call.desc = "(Lnet/minecraft/world/World;Lnet/minecraft/util/Vec3;Lnet/minecraft/util/Vec3;)Lnet/minecraft/util/MovingObjectPosition;";
+                    call.itf = false;
+                    changed++;
+                }
+            }
+        }
+        if (changed != 1) throw new IllegalStateException("Freecam EntityRenderer rayTraceBlocks patch expected 1 site, got " + changed);
+        entityRendererPatched = true;
+        System.out.println("[Freecam] EntityRenderer orientCamera rayTrace patched");
         ClassWriter writer = new ClassWriter(0);
         node.accept(writer);
         return writer.toByteArray();

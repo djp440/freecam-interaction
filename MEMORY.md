@@ -1,5 +1,19 @@
 # 项目记忆
 
+- 2026-09-10 12:17：用户明确人工确认双版本（Forge 1.7.10 与 NeoForge 1.21.1）自由视角障碍跳位修复（方案 A）验收无误。按用户指令提交本轮修改。
+
+- 2026-09-10 11:17：按用户要求启动 1.7.10 + lwjgl3ify 开发客户端以实机体验障碍跳位修复（方案 A）。`pwsh -File scripts/lwjgl3ify.ps1 client` 构建并启动，游戏成功加载最新自由视角交互 Mod、UniMixins、Iron Chests 及 lwjgl3ify，OpenAL 音频初始化完成，主菜单就绪。客户端留给用户测试体验，未进入世界或修改存档。
+
+- 2026-09-10 11:12：按用户明确指令“按方案A修复”完成 1.7.10 自由视角障碍跳位修复（方案 A）实施与自检。
+  - 核心渲染补丁：在 `FreecamTransformer` 中新增 `patchEntityRenderer`，定点将 `EntityRenderer.orientCamera` 中对 `WorldClient/World.rayTraceBlocks` 的调用替换为 `FreecamClient.cameraRayTrace`；当自由视角激活时返回 `null`（保持 13.856406F 距离不回缩），非自由视角走原版逻辑，严格断言改动站点恰好为 1 处。
+  - 镜头碰撞求解：新增 `FreecamCollision`，以 $C = A + B(R)$ 严格维系逻辑锚点 $A$ 与光学镜头 $C$ 的对应关系。使用半径 0.20 镜头包围盒执行 swept broadphase/narrowphase 轴向滑动（复用 `calculateYOffset`/`XOffset`/`ZOffset`）；对中键旋转执行 3D 圆弧多微步步进检测，遇阻截停在安全角度；下降位移检测水/岩浆液面并作为防下沉支撑。
+  - 客户端整合：在 `FreecamClient` 的 `frame()` 中先旋转后平移，平移目标依然受 `FreecamRange.clampCamera` 约束，求解接受位移后同步更新锚点位置；彻底移除原单列扫描的 `getDropFloor`。
+  - 自动化验证：在 `LegacyActionCheck` 中重建跳位复现（确认原版 8 射线算法在锚点平移 0.02 格时产生超 12 格剧烈跳位），断言 `FreecamCollision` 消除跳位（实际位移恰好 0.02、跳位为 0），并覆盖真实 `EntityRenderer` 字节码补丁校验、贴墙滑动、旋转圆弧截停及液面防沉断言。`scripts/forge1710.ps1 smoke`（日志 `logs/tools/2026-09-10 11-12-11.log`）与 `scripts/lwjgl3ify.ps1 smoke`（日志 `logs/tools/2026-09-10 11-12-25.log`）全部通过，`git diff --check` 无格式异常。
+
+- 2026-09-10 11:01：按用户“设计修复方案并交接给下个 agent”要求新增 `HANDOFF-camera-collision.md`，记录保留绕锚点操作、对实际镜头扫过路径做局部碰撞的设计及渲染接入缺口；未实施产品修复。当前检查发现 `.diagnose-tmp/` 不存在，10:37 条目引用的复现脚本已不可直接运行；交接文档提供重建场景，不能把历史报告日志链接当成现存产物。保留原有 MEMORY 未提交修改。
+
+- 2026-09-10 10:37：用户反馈 Forge 1.7.10 自由视角旋转、平移、升降时，路径附近障碍会使摄像机被挤到无关位置。本轮只读诊断已稳定复现：原版 `EntityRenderer.orientCamera` 的 8 条第三人称安全射线在代理相机锚点附近的偏移射线命中时，将渲染距离从 13.856406 格瞬间缩至约 1.51 格；锚点仅移动 0.020 格即可造成约 12.35 格画面跳位，中心射线和实际期望相机路径均未命中。`FreecamClient.frame` 仅直接 `setPosition`，未调用实体碰撞移动；`getDropFloor` 只在 `yOffset < 0` 时执行，不能解释旋转、水平移动或上升。复现脚本为 `.diagnose-tmp/repro-camera.ps1`，构建通过，冒烟 `logs/tools/2026-09-10 10-22-28.log` 通过；尚未实施修复或游戏内复测。
+
 - 2026-09-10 10:00：用户人工确认 1.7.10 的桶/水桶及桶类自由视角光标交互已修复，继 1.21.1 后双版本均完成实机验收。按用户要求提交本轮已验收的实体交互、桶交互、1.21.1 独立开发运行配置及对应冒烟检查；提交前 `git diff --check` 仅报告 Git 换行转换提示。
 
 - 2026-09-10 09:59：按用户要求启动 1.7.10 + lwjgl3ify 开发客户端以实机验证桶修复。启动前确认无运行客户端；`pwsh -File scripts/lwjgl3ify.ps1 client` 完成构建并启动，游戏 PID 39340，桌面确认窗口 `Minecraft 1.7.10` 已出现，工具日志 `logs/tools/2026-09-10 09-59-08.log`。客户端留给用户测试，未进入世界或修改存档。
