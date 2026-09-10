@@ -153,6 +153,34 @@ public class LegacyActionCheck {
         System.out.println("EntityRenderer patch check passed (real Minecraft bytecode).");
     }
 
+    private static void minecraftPatchCheck() throws Exception {
+        String name = "net.minecraft.client.Minecraft";
+        java.io.InputStream stream = LegacyActionCheck.class.getResourceAsStream("/" + name.replace('.', '/') + ".class");
+        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+        try {
+            byte[] buffer = new byte[4096];
+            for (int count; (count = stream.read(buffer)) != -1;) bytes.write(buffer, 0, count);
+        } finally { stream.close(); }
+        byte[] patched = new local.freecaminteraction.core.FreecamTransformer().transform(name, name, bytes.toByteArray());
+        org.objectweb.asm.tree.ClassNode node = new org.objectweb.asm.tree.ClassNode();
+        new org.objectweb.asm.ClassReader(patched).accept(node, 0);
+        int hooks = 0;
+        for (org.objectweb.asm.tree.MethodNode method : node.methods) {
+            if ((method.name.equals("func_147115_a") || method.name.equals("sendClickBlockToController"))
+                    && method.desc.equals("(Z)V")) {
+                for (org.objectweb.asm.tree.AbstractInsnNode instruction : method.instructions.toArray()) {
+                    if (instruction instanceof org.objectweb.asm.tree.MethodInsnNode) {
+                        org.objectweb.asm.tree.MethodInsnNode call = (org.objectweb.asm.tree.MethodInsnNode) instruction;
+                        if (call.owner.equals("local/freecaminteraction/client/FreecamClient")
+                                && call.name.equals("isFreecamActive")) hooks++;
+                    }
+                }
+            }
+        }
+        assert hooks == 1 : "Minecraft sendClickBlockToController isFreecamActive hook missing";
+        System.out.println("Minecraft tick patch check passed (real Minecraft bytecode).");
+    }
+
     private static void dropPatchCheck() throws Exception {
         String name = "net.minecraft.server.management.ItemInWorldManager";
         java.io.InputStream stream = LegacyActionCheck.class.getResourceAsStream("/" + name.replace('.', '/') + ".class");
@@ -439,6 +467,7 @@ public class LegacyActionCheck {
         bucketPatchCheck();
         tradePatchCheck();
         rendererPatchCheck();
+        minecraftPatchCheck();
         dropPatchCheck();
         dropInventoryCheck();
         reproductionAndCollisionCheck();

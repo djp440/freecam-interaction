@@ -28,6 +28,9 @@ public final class FreecamTransformer implements IClassTransformer {
         if (transformedName.equals("net.minecraft.client.renderer.EntityRenderer")) {
             return patchEntityRenderer(bytes);
         }
+        if (transformedName.equals("net.minecraft.client.Minecraft")) {
+            return patchMinecraftTick(bytes);
+        }
         if (transformedName.equals("net.minecraft.entity.ai.EntityAITradePlayer")) {
             return patchTradeAi(bytes);
         }
@@ -388,6 +391,30 @@ public final class FreecamTransformer implements IClassTransformer {
                 }
             }
         };
+        node.accept(writer);
+        return writer.toByteArray();
+    }
+
+    private byte[] patchMinecraftTick(byte[] bytes) {
+        ClassNode node = new ClassNode();
+        new ClassReader(bytes).accept(node, 0);
+        int changed = 0;
+        for (MethodNode method : node.methods) {
+            if ((method.name.equals("func_147115_a") || method.name.equals("sendClickBlockToController"))
+                    && method.desc.equals("(Z)V")) {
+                InsnList prefix = new InsnList();
+                LabelNode proceed = new LabelNode();
+                prefix.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "local/freecaminteraction/client/FreecamClient", "isFreecamActive", "()Z", false));
+                prefix.add(new JumpInsnNode(Opcodes.IFEQ, proceed));
+                prefix.add(new InsnNode(Opcodes.RETURN));
+                prefix.add(proceed);
+                method.instructions.insert(prefix);
+                changed++;
+            }
+        }
+        if (changed != 1) throw new IllegalStateException("Freecam Minecraft tick patch expected 1 site, got " + changed);
+        System.out.println("[Freecam] Minecraft sendClickBlockToController patched");
+        ClassWriter writer = new ClassWriter(0);
         node.accept(writer);
         return writer.toByteArray();
     }

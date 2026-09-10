@@ -1,5 +1,12 @@
 # 项目记忆
 
+- 2026-09-10 17:06：用户完成 Forge 1.7.10 自由视角生存模式方块挖掘实机测试，明确反馈“修复成功，提交”。据此记录实机验收通过并提交本次修复；提交内容包含 Minecraft.func_147115_a 字节码补丁（消除自由视角下主循环对 resetBlockRemoving 的误触发）、真实字节码补丁自动化回归自检、项目文档及记忆更新。
+
+- 2026-09-10 17:00：解决 Forge 1.7.10 自由视角生存模式下无法正常挖掘方块（进度始终为 0）的严重 Bug。
+  - 根因：原版主循环 `Minecraft.java:2058` 在每一 Tick 因自由视角释放光标（`inGameHasFocus == false`）而持续调用 `func_147115_a(false)`，导致其内部触发 `playerController.resetBlockRemoving()`，在微秒内将刚累加的破坏进度抹零并清除方块裂纹，同时发送取消挖掘数据包。
+  - 方案实施：在 `FreecamTransformer` 中新增 `patchMinecraftTick` 字节码补丁，定点拦截 `Minecraft.func_147115_a(Z)V`（兼容 MCP 名 `sendClickBlockToController`）；在方法入口注入 `FreecamClient.isFreecamActive()` 守卫，自由视角激活时直接 return，由 `FreecamClient` 独占管理挖掘周期，彻底切断原版主循环的无条件抹零；非自由视角或退出后 100% 走原版逻辑。
+  - 验证凭据：在 `LegacyActionCheck.java` 中增加针对真实 `net.minecraft.client.Minecraft` 字节码补丁的自动化测试；执行 `scripts/forge1710.ps1 smoke` 全项通过，包含真实 `Minecraft.class` 字节码转换验证、AE2 补丁校验、碰撞求解与掉落入包自检；产物 JAR 构建正常。
+
 - 2026-09-10 16:33：定位并解决客户端启动崩溃问题。根因为 CodeChickenCore 启动时通过自带旧版 DepLoader 尝试从已失效的旧服务器（chickenbones.net）自动下载 CodeChickenLib，收到 301 响应并将“Moved Permanently”写入 JAR 触发 ZipException 崩溃。已在 `scripts/tech-mods.ps1` 中加入 Covers1624 官方 Maven 源的有效 `CodeChickenLib-1.7.10-1.1.3.138-universal.jar`（SHA-256 `4A0D192A...`）并直接同步至 `mods/1.7.10/`；清理损坏文件后包含 NEI 与 GT5U 在内的全部 20 个 Mod 正常加载。
 
 - 2026-09-10 16:30：按用户要求为开发客户端安装 NEI 与格雷科技 5（GT5U）。更新 `scripts/tech-mods.ps1`，固定官方源与 SHA-256 校验：CodeChickenCore 1.0.7.47、NotEnoughItems 1.0.5.120 与 GregTech 5.09.31 Unofficial。两个文件组已全量同步至原生开发实例 `run/mods` 与 lwjgl3ify 隔离实例 `instance/mods`；执行 `scripts/forge1710.ps1 smoke` 与 `scripts/lwjgl3ify.ps1 smoke` 自动化冒烟均全量通过。

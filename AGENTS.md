@@ -1,5 +1,7 @@
 # 项目说明
 
+- 自由视角生存挖掘修复（2026-09-10）：`FreecamTransformer` 定点拦截 `Minecraft.func_147115_a`（`sendClickBlockToController`），在自由视角激活时阻断原版主循环因失焦触发的无条件挖掘重置（`playerController.resetBlockRemoving`），恢复方块裂纹与破坏进度的正常累加与破坏；非自由视角保持 100% 原版逻辑。
+
 - 通用交互掉落入包（2026-09-10）：Forge 1.7.10 自由视角合法同步交互产生的物品实体会立即尝试进入操作者主背包，覆盖挖掘、右键工具拆卸、实体交互/击杀、钓鱼及 AE2 ME 线缆/部件（PartPlacement 独立拆卸射线与掉落包裹）；实现按交互上下文归属，不依赖特定物品白名单。背包不足的余量留在原地，保留 NBT；延迟掉落不推测归属。1.21.1 对应功能待实现。
 
 - 科技与辅助 Mod 开发环境（2026-09-10）：原生 Forge 与 lwjgl3ify 开发实例固定安装 IC2 2.2.828-experimental、AE2 rv3-beta-6、CodeChickenCore 1.0.7.47、NotEnoughItems 1.0.5.120 与 GregTech 5.09.31 Unofficial；使用 `pwsh -File scripts/tech-mods.ps1 all` 下载、校验并恢复两个实例。
