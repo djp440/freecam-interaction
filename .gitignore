@@ -9,3 +9,5 @@ logs/
 .project
 .settings/
 bin/
+asm/
+saves/

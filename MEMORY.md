@@ -1,5 +1,9 @@
 # 项目记忆
 
+- 2026-09-10 16:33：定位并解决客户端启动崩溃问题。根因为 CodeChickenCore 启动时通过自带旧版 DepLoader 尝试从已失效的旧服务器（chickenbones.net）自动下载 CodeChickenLib，收到 301 响应并将“Moved Permanently”写入 JAR 触发 ZipException 崩溃。已在 `scripts/tech-mods.ps1` 中加入 Covers1624 官方 Maven 源的有效 `CodeChickenLib-1.7.10-1.1.3.138-universal.jar`（SHA-256 `4A0D192A...`）并直接同步至 `mods/1.7.10/`；清理损坏文件后包含 NEI 与 GT5U 在内的全部 20 个 Mod 正常加载。
+
+- 2026-09-10 16:30：按用户要求为开发客户端安装 NEI 与格雷科技 5（GT5U）。更新 `scripts/tech-mods.ps1`，固定官方源与 SHA-256 校验：CodeChickenCore 1.0.7.47、NotEnoughItems 1.0.5.120 与 GregTech 5.09.31 Unofficial。两个文件组已全量同步至原生开发实例 `run/mods` 与 lwjgl3ify 隔离实例 `instance/mods`；执行 `scripts/forge1710.ps1 smoke` 与 `scripts/lwjgl3ify.ps1 smoke` 自动化冒烟均全量通过。
+
 - 2026-09-10 16:25：用户完成 Forge 1.7.10 自由视角模式下手持扳手蹲下右键拆除 AE2 ME 线缆/部件及掉落物直入背包实机体验，明确反馈“已成功修复，提交”。据此记录实机验收通过并准备提交；本次提交包含 AE2 拆卸射线同步与平台钩子、PartPlacement 包装拦截与掉落物入包、客户端双击快捷启动批处理及相关自检与文档更新。
 
 - 2026-09-10 15:59：按用户要求启动已安装 IC2/AE2 的 Forge 1.7.10 + lwjgl3ify 3.0.33 开发客户端。客户端自动构建并加载包含 AE2 ME 线缆拆卸与掉落入包修复的最新 Mod JAR，音频引擎启动成功，Java 进程（PID 8428）响应正常，客户端留给用户进行实机体验。

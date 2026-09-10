@@ -2,7 +2,7 @@
 
 - 通用交互掉落入包（2026-09-10）：Forge 1.7.10 自由视角合法同步交互产生的物品实体会立即尝试进入操作者主背包，覆盖挖掘、右键工具拆卸、实体交互/击杀、钓鱼及 AE2 ME 线缆/部件（PartPlacement 独立拆卸射线与掉落包裹）；实现按交互上下文归属，不依赖特定物品白名单。背包不足的余量留在原地，保留 NBT；延迟掉落不推测归属。1.21.1 对应功能待实现。
 
-- IC2/AE2 开发环境（2026-09-10）：原生 Forge 与 lwjgl3ify 开发实例固定安装 IC2 2.2.828-experimental、AE2 rv3-beta-6；使用 `pwsh -File scripts/tech-mods.ps1 all` 下载、校验并恢复两个实例。
+- 科技与辅助 Mod 开发环境（2026-09-10）：原生 Forge 与 lwjgl3ify 开发实例固定安装 IC2 2.2.828-experimental、AE2 rv3-beta-6、CodeChickenCore 1.0.7.47、NotEnoughItems 1.0.5.120 与 GregTech 5.09.31 Unofficial；使用 `pwsh -File scripts/tech-mods.ps1 all` 下载、校验并恢复两个实例。
 
 - 法杖材质（2026-09-10）：`src/forge1710/resources/assets/freecam_interaction/textures/items/wand_{normal,advanced,creative}.png` 为32×32透明PNG，强调色依次蓝、红、紫。原图/提示词/预览在 `art/wands`；导出检查使用 `scripts/wand-textures.ps1`。
 
