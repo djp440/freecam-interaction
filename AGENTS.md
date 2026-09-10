@@ -2,7 +2,7 @@
 
 - 通用交互掉落入包（2026-09-10）：相邻 Forge 1.7.10 工作树已实现按服务端同步交互上下文归属的掉落直接入包，覆盖挖掘、右键工具拆卸、实体交互/击杀、钓鱼及 AE2 ME 线缆/部件拆卸；背包余量安全落地并保留 NBT。当前 1.21.1 对应功能待实现。
 
-- IC2/AE2 开发环境（2026-09-10）：相邻 Forge 1.7.10 工作树的原生与 lwjgl3ify 开发实例均已安装 IC2 2.2.828-experimental、AE2 rv3-beta-6；可用其 `scripts/tech-mods.ps1` 恢复。
+- 科技与辅助 Mod 开发环境（2026-09-10）：相邻 Forge 1.7.10 工作树的原生与 lwjgl3ify 开发实例均已安装 IC2 2.2.828-experimental、AE2 rv3-beta-6、CodeChickenCore 1.0.7.47、NotEnoughItems 1.0.5.120 与 GregTech 5.09.31 Unofficial；可用其 `scripts/tech-mods.ps1` 恢复。
 
 - 法杖材质（2026-09-10）：相邻1.7.10工作树已补充32×32透明PNG（普通蓝／高级红／创造紫），详见其 `art/wands/PROMPTS.md`；本工作树1.21.1功能仍待实现。
 
