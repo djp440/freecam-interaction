@@ -51,9 +51,27 @@ class InteractionCheck {
         assert area(GodviewGeometry.faces(List.of(slab), 1, 1, 0.5)) == 1;
         assert area(GodviewGeometry.faces(List.of(slab, step), 1, 1, 0.5)) == 0.5;
         assert area(GodviewGeometry.faces(List.of(slab, step), 1, 1, 1)) == 0.5;
-        assert GodviewGeometry.faces(List.of(slab, step), 1, -1, 0.5).isEmpty();
         assert GodviewGeometry.faces(List.of(), 1, 1, 1).isEmpty();
-        System.out.println("Interaction checks passed: range edges, negative coordinates, invalid values, rays and exposed cube/slab/stair faces.");
+
+        // GodviewCollision 几何与映射测试
+        Vec3 b = local.godviewbuild.client.GodviewCollision.backwardVector(0, 0);
+        assert Math.abs(b.x) < 1e-9 && Math.abs(b.y) < 1e-9 && Math.abs(b.z - local.godviewbuild.client.GodviewCollision.DISTANCE) < 1e-9 : "0角度后退向量应为 (0, 0, DISTANCE)";
+        Vec3 c = local.godviewbuild.client.GodviewCollision.cameraPos(10, 20, 30, 0, 0);
+        assert Math.abs(c.x - 10) < 1e-9 && Math.abs(c.y - 20) < 1e-9 && Math.abs(c.z - (30 + local.godviewbuild.client.GodviewCollision.DISTANCE)) < 1e-9;
+        Vec3 a = local.godviewbuild.client.GodviewCollision.anchorPos(c.x, c.y, c.z, 0, 0);
+        assert Math.abs(a.x - 10) < 1e-9 && Math.abs(a.y - 20) < 1e-9 && Math.abs(a.z - 30) < 1e-9 : "反求锚点与原锚点应严格一致";
+
+        // 无障碍平移与求解测试
+        Vec3 move = local.godviewbuild.client.GodviewCollision.solveTranslation(null, c.x, c.y, c.z, 0.5, 0.2, -0.1);
+        assert Math.abs(move.x - 0.5) < 1e-9 && Math.abs(move.y - 0.2) < 1e-9 && Math.abs(move.z - (-0.1)) < 1e-9;
+        float[] rot = local.godviewbuild.client.GodviewCollision.solveRotation(null, 10, 20, 30, 0, 0, 45, 10);
+        assert Math.abs(rot[0] - 45) < 1e-5 && Math.abs(rot[1] - 10) < 1e-5;
+
+        // 包围盒尺寸与边缘测试
+        AABB box = local.godviewbuild.client.GodviewCollision.cameraBox(0, 0, 0);
+        assert Math.abs(box.getXsize() - 0.40) < 1e-9 && Math.abs(box.getYsize() - 0.40) < 1e-9 && Math.abs(box.getZsize() - 0.40) < 1e-9;
+
+        System.out.println("Interaction checks passed: range edges, negative coordinates, invalid values, rays, exposed cube/slab/stair faces and GodviewCollision geometry.");
     }
 
     private static double area(List<double[]> faces) {

@@ -89,8 +89,12 @@ final class GodviewSession {
                     != GLFW.GLFW_PRESS) {
                 drag(false);
             } else {
-                yaw = Mth.wrapDegrees(yaw + (float) ((currentX - mouseX) * 0.2));
-                pitch = Mth.clamp(pitch + (float) ((currentY - mouseY) * 0.2), -85.0F, 85.0F);
+                float targetYaw = Mth.wrapDegrees(yaw + (float) ((currentX - mouseX) * 0.2));
+                float targetPitch = Mth.clamp(pitch + (float) ((currentY - mouseY) * 0.2), -85.0F, 85.0F);
+                float[] safeRot = GodviewCollision.solveRotation(client.level, anchor.x, anchor.y, anchor.z,
+                        yaw, pitch, targetYaw, targetPitch);
+                yaw = safeRot[0];
+                pitch = safeRot[1];
             }
         }
         mouseX = currentX;
@@ -102,36 +106,22 @@ final class GodviewSession {
         if (forward != 0 || right != 0 || up != 0) {
             var offset = GodviewMotion.pan(yaw, forward, right, elapsed);
             double yOffset = GodviewMotion.vertical(up, elapsed);
-            double nextX = GodviewRange.clampCamera(originPlayer.getX(), anchor.x + offset.x());
-            double nextY = GodviewRange.clampCamera(originPlayer.getY(), anchor.y + yOffset);
-            double nextZ = GodviewRange.clampCamera(originPlayer.getZ(), anchor.z + offset.z());
-            if (yOffset < 0) {
-                nextY = Math.max(nextY, getDropFloor(client.level, nextX, anchor.y, nextZ));
-            }
+            double targetX = GodviewRange.clampCamera(originPlayer.getX(), anchor.x + offset.x());
+            double targetY = GodviewRange.clampCamera(originPlayer.getY(), anchor.y + yOffset);
+            double targetZ = GodviewRange.clampCamera(originPlayer.getZ(), anchor.z + offset.z());
+
+            Vec3 currentCam = GodviewCollision.cameraPos(anchor.x, anchor.y, anchor.z, yaw, pitch);
+            double deltaX = targetX - anchor.x;
+            double deltaY = targetY - anchor.y;
+            double deltaZ = targetZ - anchor.z;
+
+            Vec3 accepted = GodviewCollision.solveTranslation(client.level, currentCam.x, currentCam.y, currentCam.z,
+                    deltaX, deltaY, deltaZ);
+            double nextX = GodviewRange.clampCamera(originPlayer.getX(), anchor.x + accepted.x);
+            double nextY = GodviewRange.clampCamera(originPlayer.getY(), anchor.y + accepted.y);
+            double nextZ = GodviewRange.clampCamera(originPlayer.getZ(), anchor.z + accepted.z);
             anchor = new Vec3(nextX, nextY, nextZ);
         }
-    }
-
-    private static double getDropFloor(Level level, double x, double startY, double z) {
-        if (level == null) return -29999984.0;
-        int blockX = Mth.floor(x);
-        int blockZ = Mth.floor(z);
-        int minBuildY = level.getMinBuildHeight();
-        int fromY = Mth.clamp(Mth.floor(startY), minBuildY, level.getMaxBuildHeight() - 1);
-        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-        for (int by = fromY; by >= minBuildY; by--) {
-            pos.set(blockX, by, blockZ);
-            BlockState state = level.getBlockState(pos);
-            if (state.isAir()) continue;
-            if (state.isSolid() || !state.getFluidState().isEmpty()) {
-                VoxelShape shape = state.getCollisionShape(level, pos);
-                if (!shape.isEmpty()) {
-                    return by + shape.max(Direction.Axis.Y);
-                }
-                return by + 1.0;
-            }
-        }
-        return minBuildY;
     }
 
     boolean isKeyDown(int key) {
