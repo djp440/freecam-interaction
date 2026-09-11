@@ -1,5 +1,20 @@
 # 项目记忆
 
+- 2026-09-11 21:47：调整自由视角光标跟随物品渲染偏移。
+  - 将手持物品在光标右下方的渲染偏移由 `(+10, +10)` 缩小至 `(+4, +4)`，使物品图标更加紧凑地贴近鼠标光标尖端，同时保持不阻挡热点判定。
+  - 验证：执行 `pwsh -File scripts/forge1710.ps1 smoke`，编译与自动化检查全部通过。
+
+- 2026-09-11 21:46：完成自由视角模式光标旁显示选中物品与快捷栏点击切槽/防误挖（Forge 1.7.10）。
+  - 需求背景：用户优化自由视角体验，要求光标旁跟随显示快捷栏选中物品，且允许直接鼠标点击底部快捷栏 GUI 切换选中槽位，并保证点击不会误触发对世界中方块的挖掘。
+  - 实现方案：
+    1. 新增 `FreecamHotbar` 抽象纯数学几何命中算法：基于原版 182×22 快捷栏几何（左上角 `(screenWidth / 2 - 91, screenHeight - 22)`），将鼠标位置映射到槽位 0..8。
+    2. 在 `FreecamClient.mouse()` 中优先拦截左键点击快捷栏：命中时立即调用 `stopMining()` 终止当前正在进行的挖掘，同步切槽 `player.inventory.currentItem`，记录 `ModLog`，并取消事件阻止进入世界点击与挖掘管线。
+    3. 在 `FreecamClient.hud()` 中使用原版 `RenderItem`（`renderItemAndEffectIntoGUI` / `renderItemOverlayIntoGUI`）在自由视角下渲染鼠标光标右下方偏移 (10, 10) 的手持物品图标、数量与耐久度。
+  - 验证：
+    1. 在 `scripts/LegacyCheck.java` 中增加快捷栏边界与槽位映射的断言（左边界外、左边框、槽位 0、槽位 8、右边框、右边界外、上下边界外）。
+    2. 执行 `pwsh -File scripts/forge1710.ps1 smoke`，编译、ActionCheck 及 Java 8 断言全部通过（BUILD SUCCESSFUL）。
+
+
 - 2026-09-11 21:14：修复 AE2 线缆蓝图“已采集但预览缺失、施工全部失败”的回归。
   - 用户日志中的 `blocks=3; parts=8` 证明采集、BPFC 与切片传输正常；根因一是 `BlueprintGhostRenderer` 只遍历方块条目，而 AE2 总线宿主按设计不重复保存为方块条目。渲染器现额外按坐标去重绘制部件宿主格，纯 AE2 线缆位置也会显示；与普通方块/GT 宿主重合时不叠加。
   - 根因二是 `BlueprintPartSupport.optionalGet` 从包私有 Guava `Present` 实现类反射公开 `get()`，Java 8 仍会抛 `IllegalAccessException`。现缓存并通过公开 `com.google.common.base.Optional` 基类的 `get()` 方法调用；`LegacyActionCheck` 使用真实 `Optional.of` 覆盖该回归。

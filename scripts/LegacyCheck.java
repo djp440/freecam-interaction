@@ -69,6 +69,24 @@ public class LegacyCheck {
         assert Math.abs(FreecamRange.clampCameraY(-10.0) - 0.5) < 1e-9;
         assert Math.abs(FreecamRange.clampCameraY(128.0) - 128.0) < 1e-9;
 
+        // 5. 快捷栏光标点击命中判定 (182x22, 居中放置于底部)
+        // 屏幕分辨率 800x600: left = 400 - 91 = 309, top = 600 - 22 = 578
+        // relX = mouseX - (left + 1) = mouseX - 310
+        // 槽位 0: relX 0..19 -> mouseX 310..329
+        // 槽位 8: relX 160..179 -> mouseX 470..489
+        assert local.freecaminteraction.client.FreecamHotbar.getSlotAt(308, 580, 800, 600) == -1; // 快捷栏外部左侧
+        assert local.freecaminteraction.client.FreecamHotbar.getSlotAt(309, 580, 800, 600) == -1; // 快捷栏最左边框 (relX < 0)
+        assert local.freecaminteraction.client.FreecamHotbar.getSlotAt(310, 580, 800, 600) == 0;  // 槽位 0 最左像素
+        assert local.freecaminteraction.client.FreecamHotbar.getSlotAt(329, 580, 800, 600) == 0;  // 槽位 0 最右像素
+        assert local.freecaminteraction.client.FreecamHotbar.getSlotAt(330, 580, 800, 600) == 1;  // 槽位 1 最左像素
+        assert local.freecaminteraction.client.FreecamHotbar.getSlotAt(470, 580, 800, 600) == 8;  // 槽位 8 最左像素
+        assert local.freecaminteraction.client.FreecamHotbar.getSlotAt(489, 580, 800, 600) == 8;  // 槽位 8 最右像素
+        assert local.freecaminteraction.client.FreecamHotbar.getSlotAt(490, 580, 800, 600) == -1; // 快捷栏最右边框 (relX = 180, relX/20 = 9)
+        assert local.freecaminteraction.client.FreecamHotbar.getSlotAt(491, 580, 800, 600) == -1; // 右边界外
+        assert local.freecaminteraction.client.FreecamHotbar.getSlotAt(400, 577, 800, 600) == -1; // 上边界外
+        assert local.freecaminteraction.client.FreecamHotbar.getSlotAt(400, 600, 800, 600) == -1; // 下边界外
+        assert local.freecaminteraction.client.FreecamHotbar.getSlotAt(400, 599, 800, 600) >= 0;  // 内部有效
+
         ModLog.initialize();
         ModLog.initialize();
         ModLog.info("Legacy Java 8 smoke passed: motion, wand tiers, chunk range, and idempotent log initialization.");

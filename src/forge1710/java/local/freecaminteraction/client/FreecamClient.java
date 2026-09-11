@@ -25,6 +25,8 @@ import net.minecraft.client.entity.EntityClientPlayerMP;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.EntityRenderer;
+import net.minecraft.client.renderer.RenderHelper;
+import net.minecraft.client.renderer.entity.RenderItem;
 import net.minecraft.client.renderer.ActiveRenderInfo;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.client.settings.GameSettings;
@@ -47,10 +49,13 @@ import org.lwjgl.Sys;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.Display;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL12;
 
 @SideOnly(Side.CLIENT)
 public final class FreecamClient {
     private static final Minecraft MC = Minecraft.getMinecraft();
+    private static final RenderItem ITEM_RENDERER = new RenderItem();
     private static final KeyBinding TOGGLE = new KeyBinding("key.freecam_interaction.enter", Keyboard.KEY_G, "key.categories.freecam_interaction");
     private static final KeyBinding KEY_BLUEPRINT = new KeyBinding("key.freecam_interaction.blueprint", Keyboard.KEY_B, "key.categories.freecam_interaction");
     private static final Field DISTANCE = ReflectionHelper.findField(EntityRenderer.class, "thirdPersonDistance", "field_78490_B");
@@ -343,6 +348,16 @@ public final class FreecamClient {
             return;
         }
         if (event.button == 0 && event.buttonstate) {
+            int hotbarSlot = getHotbarSlotUnderMouse();
+            if (hotbarSlot >= 0) {
+                stopMining();
+                if (MC.thePlayer != null && MC.thePlayer.inventory.currentItem != hotbarSlot) {
+                    MC.thePlayer.inventory.currentItem = hotbarSlot;
+                    ModLog.info(String.format("Hotbar slot selected via cursor click: %d", hotbarSlot));
+                }
+                event.setCanceled(true);
+                return;
+            }
             if (overClose()) {
                 exit("close_button");
                 return;
@@ -584,6 +599,14 @@ public final class FreecamClient {
         camera.prevRotationPitch = camera.rotationPitch;
     }
 
+    private int getHotbarSlotUnderMouse() {
+        if (MC.thePlayer == null || MC.gameSettings.hideGUI) return -1;
+        ScaledResolution resolution = new ScaledResolution(MC, MC.displayWidth, MC.displayHeight);
+        int mouseX = Mouse.getX() * resolution.getScaledWidth() / MC.displayWidth;
+        int mouseY = resolution.getScaledHeight() - Mouse.getY() * resolution.getScaledHeight() / MC.displayHeight - 1;
+        return FreecamHotbar.getSlotAt(mouseX, mouseY, resolution.getScaledWidth(), resolution.getScaledHeight());
+    }
+
     private boolean overClose() {
         ScaledResolution resolution = new ScaledResolution(MC, MC.displayWidth, MC.displayHeight);
         int x = Mouse.getX() * resolution.getScaledWidth() / MC.displayWidth;
@@ -649,5 +672,32 @@ public final class FreecamClient {
         // 关闭 X 按钮
         Gui.drawRect(width - 30, 6, width - 6, 30, overClose() ? 0xFF487C78 : 0xD9101C29);
         MC.fontRenderer.drawStringWithShadow("X", width - 21, 14, 0xFFFFFF);
+
+        renderCursorHeldItem(event.resolution);
+    }
+
+    private void renderCursorHeldItem(ScaledResolution resolution) {
+        if (MC.thePlayer == null) return;
+        ItemStack held = MC.thePlayer.inventory.getCurrentItem();
+        if (held == null) return;
+
+        int mouseX = Mouse.getX() * resolution.getScaledWidth() / MC.displayWidth;
+        int mouseY = resolution.getScaledHeight() - Mouse.getY() * resolution.getScaledHeight() / MC.displayHeight - 1;
+        int renderX = mouseX + 4;
+        int renderY = mouseY + 4;
+
+        GL11.glPushMatrix();
+        GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
+        GL11.glDisable(GL11.GL_LIGHTING);
+        GL11.glEnable(GL11.GL_DEPTH_TEST);
+        RenderHelper.enableGUIStandardItemLighting();
+        GL11.glEnable(GL12.GL_RESCALE_NORMAL);
+
+        ITEM_RENDERER.renderItemAndEffectIntoGUI(MC.fontRenderer, MC.getTextureManager(), held, renderX, renderY);
+        ITEM_RENDERER.renderItemOverlayIntoGUI(MC.fontRenderer, MC.getTextureManager(), held, renderX, renderY);
+
+        RenderHelper.disableStandardItemLighting();
+        GL11.glPopAttrib();
+        GL11.glPopMatrix();
     }
 }
