@@ -104,12 +104,36 @@ public final class FreecamTransformer implements IClassTransformer {
             code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "local/freecaminteraction/FreecamDropCollector", "beginBlock",
                     "(Lnet/minecraft/server/management/ItemInWorldManager;Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/world/World;IIILjava/lang/String;)Ljava/lang/Object;", false));
             code.add(new VarInsnNode(Opcodes.ASTORE, tokenLocal));
+            if (activate) {
+                code.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "local/freecaminteraction/FreecamEffects", "beginUse",
+                        "(Lnet/minecraft/entity/player/EntityPlayer;)V", false));
+            }
             code.add(start);
             code.add(new VarInsnNode(Opcodes.ALOAD, 0));
             int local = 1;
             for (Type arg : args) { code.add(new VarInsnNode(arg.getOpcode(Opcodes.ILOAD), local)); local += arg.getSize(); }
             code.add(new MethodInsnNode(Opcodes.INVOKESPECIAL, node.name, originalName, method.desc, false));
             code.add(new VarInsnNode(Opcodes.ISTORE, resultLocal));
+            if (harvest) {
+                code.add(new VarInsnNode(Opcodes.ALOAD, 0));
+                code.add(new VarInsnNode(Opcodes.ILOAD, 1));
+                code.add(new VarInsnNode(Opcodes.ILOAD, 2));
+                code.add(new VarInsnNode(Opcodes.ILOAD, 3));
+                code.add(new VarInsnNode(Opcodes.ILOAD, resultLocal));
+                code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "local/freecaminteraction/FreecamEffects", "finishBreak",
+                        "(Lnet/minecraft/server/management/ItemInWorldManager;IIIZ)V", false));
+            }
+            if (activate) {
+                code.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                code.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                code.add(new VarInsnNode(Opcodes.ILOAD, 4));
+                code.add(new VarInsnNode(Opcodes.ILOAD, 5));
+                code.add(new VarInsnNode(Opcodes.ILOAD, 6));
+                code.add(new VarInsnNode(Opcodes.ILOAD, resultLocal));
+                code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "local/freecaminteraction/FreecamEffects", "finishUse",
+                        "(Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/world/World;IIIZ)V", false));
+            }
             code.add(new VarInsnNode(Opcodes.ALOAD, tokenLocal));
             code.add(new InsnNode(Opcodes.ICONST_1));
             code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "local/freecaminteraction/FreecamDropCollector", "end", "(Ljava/lang/Object;Z)V", false));
@@ -118,6 +142,16 @@ public final class FreecamTransformer implements IClassTransformer {
             code.add(finish);
             code.add(handler);
             code.add(new VarInsnNode(Opcodes.ASTORE, errorLocal));
+            if (activate) {
+                code.add(new VarInsnNode(Opcodes.ALOAD, 1));
+                code.add(new VarInsnNode(Opcodes.ALOAD, 2));
+                code.add(new VarInsnNode(Opcodes.ILOAD, 4));
+                code.add(new VarInsnNode(Opcodes.ILOAD, 5));
+                code.add(new VarInsnNode(Opcodes.ILOAD, 6));
+                code.add(new InsnNode(Opcodes.ICONST_0));
+                code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "local/freecaminteraction/FreecamEffects", "finishUse",
+                        "(Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/world/World;IIIZ)V", false));
+            }
             code.add(new VarInsnNode(Opcodes.ALOAD, tokenLocal));
             code.add(new InsnNode(Opcodes.ICONST_0));
             code.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "local/freecaminteraction/FreecamDropCollector", "end", "(Ljava/lang/Object;Z)V", false));
@@ -257,13 +291,14 @@ public final class FreecamTransformer implements IClassTransformer {
     private byte[] patchEntityRenderer(byte[] bytes) {
         ClassNode node = new ClassNode();
         new ClassReader(bytes).accept(node, 0);
-        int changed = 0;
+        int rayTraceChanged = 0;
+        int renderInfoChanged = 0;
         for (MethodNode method : node.methods) {
-            if (!method.name.equals("orientCamera") && !method.name.equals("func_78467_g")) continue;
             for (AbstractInsnNode insn : method.instructions.toArray()) {
                 if (!(insn instanceof MethodInsnNode)) continue;
                 MethodInsnNode call = (MethodInsnNode) insn;
-                if ((call.name.equals("rayTraceBlocks") || call.name.equals("func_72933_a"))
+                if ((method.name.equals("orientCamera") || method.name.equals("func_78467_g"))
+                        && (call.name.equals("rayTraceBlocks") || call.name.equals("func_72933_a"))
                         && (call.owner.equals("net/minecraft/client/multiplayer/WorldClient") || call.owner.equals("bjf")
                         || call.owner.equals("net/minecraft/world/World") || call.owner.equals("ahb"))
                         && call.desc.equals("(Lnet/minecraft/util/Vec3;Lnet/minecraft/util/Vec3;)Lnet/minecraft/util/MovingObjectPosition;")) {
@@ -272,13 +307,20 @@ public final class FreecamTransformer implements IClassTransformer {
                     call.name = "cameraRayTrace";
                     call.desc = "(Lnet/minecraft/world/World;Lnet/minecraft/util/Vec3;Lnet/minecraft/util/Vec3;)Lnet/minecraft/util/MovingObjectPosition;";
                     call.itf = false;
-                    changed++;
+                    rayTraceChanged++;
+                } else if ((call.name.equals("updateRenderInfo") || call.name.equals("func_74583_a"))
+                        && call.owner.equals("net/minecraft/client/renderer/ActiveRenderInfo")
+                        && call.desc.equals("(Lnet/minecraft/entity/player/EntityPlayer;Z)V")) {
+                    call.owner = "local/freecaminteraction/client/FreecamClient";
+                    call.name = "updateRenderInfoForCamera";
+                    renderInfoChanged++;
                 }
             }
         }
-        if (changed != 1) throw new IllegalStateException("Freecam EntityRenderer rayTraceBlocks patch expected 1 site, got " + changed);
+        if (rayTraceChanged != 1) throw new IllegalStateException("Freecam EntityRenderer rayTraceBlocks patch expected 1 site, got " + rayTraceChanged);
+        if (renderInfoChanged != 1) throw new IllegalStateException("Freecam EntityRenderer render info patch expected 1 site, got " + renderInfoChanged);
         entityRendererPatched = true;
-        System.out.println("[Freecam] EntityRenderer orientCamera rayTrace patched");
+        System.out.println("[Freecam] EntityRenderer camera collision and particle facing patched");
         ClassWriter writer = new ClassWriter(0);
         node.accept(writer);
         return writer.toByteArray();
@@ -414,7 +456,16 @@ public final class FreecamTransformer implements IClassTransformer {
         }
         if (changed != 1) throw new IllegalStateException("Freecam Minecraft tick patch expected 1 site, got " + changed);
         System.out.println("[Freecam] Minecraft sendClickBlockToController patched");
-        ClassWriter writer = new ClassWriter(0);
+        ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS) {
+            @Override
+            protected String getCommonSuperClass(String type1, String type2) {
+                try {
+                    return super.getCommonSuperClass(type1, type2);
+                } catch (Throwable t) {
+                    return "java/lang/Object";
+                }
+            }
+        };
         node.accept(writer);
         return writer.toByteArray();
     }

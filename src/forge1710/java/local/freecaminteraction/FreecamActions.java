@@ -105,7 +105,7 @@ public final class FreecamActions {
     }
 
     private static void handle(EntityPlayerMP player, Action action) {
-        if (!FreecamInteraction.active(player) || action.kind < ATTACK || action.kind > USE_BUCKET
+        if (!FreecamInteraction.active(player) || action.kind <= ATTACK || action.kind > USE_BUCKET
                 || action.slot < 0 || action.slot > 8 || player.inventory.currentItem != action.slot
                 || !FreecamTarget.finite(action.start) || !FreecamTarget.finite(action.end) || !FreecamTarget.finite(action.point)) {
             reject(player, "state_or_payload"); return;
@@ -200,6 +200,7 @@ public final class FreecamActions {
                 if (done) {
                     player.swingItem();
                     ws.getEntityTracker().func_151248_b(player, new S0BPacketAnimation(player, 0));
+                    FreecamEffects.entity(player, living);
                     FreecamInteraction.deductUsage(player);
                 }
             } else {

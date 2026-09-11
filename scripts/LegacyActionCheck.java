@@ -140,17 +140,20 @@ public class LegacyActionCheck {
         byte[] patched = new local.freecaminteraction.core.FreecamTransformer().transform(name, name, bytes.toByteArray());
         org.objectweb.asm.tree.ClassNode node = new org.objectweb.asm.tree.ClassNode();
         new org.objectweb.asm.ClassReader(patched).accept(node, 0);
-        int calls = 0;
+        int rayCalls = 0, renderInfoCalls = 0;
         for (org.objectweb.asm.tree.MethodNode method : node.methods) {
             for (org.objectweb.asm.tree.AbstractInsnNode instruction : method.instructions.toArray()) {
                 if (instruction instanceof org.objectweb.asm.tree.MethodInsnNode) {
                     org.objectweb.asm.tree.MethodInsnNode call = (org.objectweb.asm.tree.MethodInsnNode) instruction;
-                    if (call.name.equals("cameraRayTrace")) calls++;
+                    if (call.name.equals("cameraRayTrace")) rayCalls++;
+                    if (call.owner.equals("local/freecaminteraction/client/FreecamClient")
+                            && call.name.equals("updateRenderInfoForCamera")) renderInfoCalls++;
                 }
             }
         }
-        assert calls == 1 : "EntityRenderer cameraRayTrace hook missing";
-        System.out.println("EntityRenderer patch check passed (real Minecraft bytecode).");
+        assert rayCalls == 1 : "EntityRenderer cameraRayTrace hook missing";
+        assert renderInfoCalls == 1 : "EntityRenderer particle-facing hook missing";
+        System.out.println("EntityRenderer patch check passed (collision ray and particle-facing hooks)." );
     }
 
     private static void minecraftPatchCheck() throws Exception {

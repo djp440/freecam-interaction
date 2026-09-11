@@ -129,6 +129,7 @@ public final class FreecamInteraction {
     public static void clear(EntityPlayerMP player) {
         PENDING.remove(player);
         FreecamActions.clear(player);
+        FreecamEffects.clear(player);
         consumeRay(player);
         State state = ACTIVE.remove(player);
         cancelMining(player);
@@ -257,6 +258,13 @@ public final class FreecamInteraction {
         if (event.world.isRemote || !ACTIVE.containsKey(event.player) || event.isCanceled()) return;
         EntityPlayerMP player = (EntityPlayerMP) event.player;
         if (active(player)) {
+            if (event instanceof BlockEvent.MultiPlaceEvent) {
+                for (BlockSnapshot block : ((BlockEvent.MultiPlaceEvent) event).getReplacedBlockSnapshots()) {
+                    FreecamEffects.recordPlacement(player, block.x, block.y, block.z);
+                }
+            } else {
+                FreecamEffects.recordPlacement(player, event.x, event.y, event.z);
+            }
             deductUsage(player);
             ModLog.info("Allowed placement: player=" + player.getCommandSenderName()
                     + "; target=" + event.x + "," + event.y + "," + event.z);
@@ -307,6 +315,7 @@ public final class FreecamInteraction {
                     clear(player);
                 } else {
                     player.theItemInWorldManager.setBlockReachDistance(256.0D);
+                    FreecamEffects.aura(player);
                 }
             }
         } else if (event.phase == TickEvent.Phase.END) {

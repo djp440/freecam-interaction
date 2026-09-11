@@ -1,5 +1,15 @@
 # 项目记忆
 
+- 2026-09-11 10:26：按用户最新决定彻底移除 Forge 1.7.10 的交互提示音，只保留末影粒子。删除 Mod 专属声音资源、声音事件缩放、客户端音量滑块/持久化及对应语言和 JAR 检查；成功挖除、放置、方块使用和实体互动现在仅广播 24 个 `portal` 粒子，多方块放置仍逐个实际位置出粒子，自由视角 aura 仍每 2 tick 广播 2 个粒子。此前的服务端成功判定、范围规则、实体右键以及粒子 billboard 朝向修复保持不变。`pwsh -File scripts/forge1710.ps1 smoke` 全项通过，日志 `logs/tools/2026-09-11 10-25-51.log`；最终 JAR 已核验不含声音类或 `sounds.json`。
+
+- 2026-09-11 10:15：为 Forge 1.7.10 在原版“音乐和声音选项”空档加入全宽“上帝视角建造音量”滑块（0–100%，默认 100%，0% 为关）。服务端提示音改用 Mod 专属 `freecam_interaction:interaction` 事件复用原版末影传送素材；客户端通过 `PlaySoundEvent17.name` 精确识别后包装 `ISound` 缩放，因此原版末影人、粒子和其他分类音量不受影响，主音量仍正常叠乘。设置独立保存至 `config/freecam_interaction-client.properties`，非法值回退/越界夹取，拖动即时生效、松开保存并试听一次。`pwsh -File scripts/forge1710.ps1 smoke` 全项通过（含真实 Coremod 字节码和新增产物检查），最终日志 `logs/tools/2026-09-11 10-16-55.log`；尚未进行游戏内界面与双客户端听感 E2E。
+
+- 2026-09-11 09:58：修复 Forge 1.7.10 自由视角粒子仅在相机与玩家本体朝向接近时可见的问题。根因是原版 `EntityRenderer.renderWorld` 调用 `ActiveRenderInfo.updateRenderInfo` 时硬编码使用 `mc.thePlayer`，而世界与粒子位置基准使用 `renderViewEntity`；自由相机与玩家朝向分离后，粒子 billboard 仍按玩家朝向旋转，侧视时近乎边缘朝向相机。`FreecamTransformer.patchEntityRenderer` 现将该唯一调用定点路由至 `FreecamClient.updateRenderInfoForCamera`：仅在自由视角激活时采用实际 `renderViewEntity`，普通视角保持原玩家。`LegacyActionCheck` 增加真实 `EntityRenderer.class` 粒子朝向钩子唯一性断言；`pwsh -File scripts/forge1710.ps1 smoke` 全项通过，日志 `logs/tools/2026-09-11 09-57-23.log`。尚待用户游戏内从侧面和背面观察粒子确认视觉效果。
+
+- 2026-09-11 09:44：按用户要求启动 Forge 1.7.10 开发客户端进行体验。首次启动被 CodeChickenLib 的 MCP 映射目录选择框阻塞，已在运行配置中固定有效 `mappingDir`；随后真实 JVM 加载暴露 `Minecraft.func_147115_a(Z)V` 入口守卫缺少栈映射帧，报 `VerifyError: Expecting a stackmap frame at branch target 7`。将 `patchMinecraftTick` 的输出改为 `ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS` 并保留公共父类解析回退后，客户端成功加载 Forge、自由视角交互、AE2、GT5U、IC2、NEI，进入 `Minecraft 1.7.10` 游戏窗口并交给用户体验。启动日志 `logs/tools/2026-09-11 09-43-17.log`。
+
+- 2026-09-11 09:36：为 Forge 1.7.10 自由视角移植末影风格交互指示。新增服务端权威 `FreecamEffects`：模式激活期间每 2 tick 在玩家本体周围广播 2 个 `portal` 粒子；成功破坏、成功方块右键、成功放置及成功实体右键在实际目标处广播 24 个 `portal` 粒子和一次 `mob.endermen.portal`（音量 0.6、音调 1.0）。`ItemInWorldManager` Coremod 包装根据最终布尔结果触发并在异常时清理，多方块放置通过 LOWEST 未取消事件收集实际坐标、逐处出粒子而整次仅响一次。客户端及服务端同时禁用自由视角实体左键远程攻击，保留受方块遮挡和范围复核的实体右键。生命周期清理同步清除待处理放置。`scripts/forge1710.ps1 smoke` 全项通过，日志 `logs/tools/2026-09-11 09-36-22.log`；尚未进行双人游戏内可见性/听感 E2E。
+
 - 2026-09-10 17:06：用户完成 Forge 1.7.10 自由视角生存模式方块挖掘实机测试，明确反馈“修复成功，提交”。据此记录实机验收通过并提交本次修复；提交内容包含 Minecraft.func_147115_a 字节码补丁（消除自由视角下主循环对 resetBlockRemoving 的误触发）、真实字节码补丁自动化回归自检、项目文档及记忆更新。
 
 - 2026-09-10 17:00：解决 Forge 1.7.10 自由视角生存模式下无法正常挖掘方块（进度始终为 0）的严重 Bug。

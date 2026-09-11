@@ -25,6 +25,7 @@ import net.minecraft.client.entity.EntityClientPlayerMP;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.EntityRenderer;
+import net.minecraft.client.renderer.ActiveRenderInfo;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.client.settings.GameSettings;
 import net.minecraft.client.settings.KeyBinding;
@@ -36,6 +37,7 @@ import net.minecraft.util.MathHelper;
 import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.util.MovementInput;
 import net.minecraft.util.Vec3;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraftforge.client.event.MouseEvent;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import net.minecraftforge.common.MinecraftForge;
@@ -110,6 +112,15 @@ public final class FreecamClient {
             return null;
         }
         return world.rayTraceBlocks(start, end);
+    }
+
+    /** 让旧版粒子 billboard 使用实际自由相机朝向，而不是玩家本体朝向。 */
+    public static void updateRenderInfoForCamera(EntityPlayer vanillaPlayer, boolean reverseView) {
+        EntityPlayer view = vanillaPlayer;
+        if (isFreecamActive() && MC.renderViewEntity instanceof EntityPlayer) {
+            view = (EntityPlayer) MC.renderViewEntity;
+        }
+        ActiveRenderInfo.updateRenderInfo(view, reverseView);
     }
 
     private boolean current() {
@@ -249,8 +260,6 @@ public final class FreecamClient {
         if (dragging) return;
         if (hit != null && hit.entityHit != null) {
             stopMining();
-            sendAction(FreecamActions.ATTACK);
-            player.swingItem();
             return;
         }
         if (hit == null || MC.theWorld.getBlock(hit.blockX, hit.blockY, hit.blockZ).isAir(MC.theWorld, hit.blockX, hit.blockY, hit.blockZ)) return;

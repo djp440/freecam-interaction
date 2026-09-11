@@ -66,6 +66,7 @@ try {
         try {
             foreach ($name in @('mcmod.info', 'local/freecaminteraction/FreecamInteractionMod.class', 'local/freecaminteraction/ModLog.class',
                     'local/freecaminteraction/FreecamInteraction.class', 'local/freecaminteraction/core/FreecamLoadingPlugin.class',
+                    'local/freecaminteraction/FreecamEffects.class',
                     'local/freecaminteraction/core/FreecamTransformer.class', 'local/freecaminteraction/client/FreecamClient.class',
                     'local/freecaminteraction/item/ItemFreecamWand.class', 'local/freecaminteraction/WandTier.class', 'local/freecaminteraction/FreecamWandRegistry.class',
                     'local/freecaminteraction/FreecamChunkLoader.class', 'local/freecaminteraction/FreecamDropCollector.class',
