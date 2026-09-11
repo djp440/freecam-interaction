@@ -58,6 +58,14 @@ public class ItemFreecamWand extends Item {
 
     @Override
     public ItemStack onItemRightClick(ItemStack stack, World world, EntityPlayer player) {
+        if (player.isSneaking()) {
+            if (!world.isRemote) {
+                player.openGui(local.freecaminteraction.FreecamInteractionMod.instance,
+                        local.freecaminteraction.FreecamWandRegistry.GUI_WAND_UPGRADE,
+                        world, player.inventory.currentItem, 0, 0);
+            }
+            return stack;
+        }
         if (world.isRemote) {
             local.freecaminteraction.client.FreecamClient.toggleFromItem();
         }
@@ -66,6 +74,14 @@ public class ItemFreecamWand extends Item {
 
     @Override
     public boolean onItemUse(ItemStack stack, EntityPlayer player, World world, int x, int y, int z, int side, float hitX, float hitY, float hitZ) {
+        if (player.isSneaking()) {
+            if (!world.isRemote) {
+                player.openGui(local.freecaminteraction.FreecamInteractionMod.instance,
+                        local.freecaminteraction.FreecamWandRegistry.GUI_WAND_UPGRADE,
+                        world, player.inventory.currentItem, 0, 0);
+            }
+            return true;
+        }
         if (world.isRemote) {
             local.freecaminteraction.client.FreecamClient.toggleFromItem();
         }
@@ -74,10 +90,114 @@ public class ItemFreecamWand extends Item {
 
     @Override
     public boolean onItemUseFirst(ItemStack stack, EntityPlayer player, World world, int x, int y, int z, int side, float hitX, float hitY, float hitZ) {
+        if (player.isSneaking()) {
+            if (!world.isRemote) {
+                player.openGui(local.freecaminteraction.FreecamInteractionMod.instance,
+                        local.freecaminteraction.FreecamWandRegistry.GUI_WAND_UPGRADE,
+                        world, player.inventory.currentItem, 0, 0);
+            }
+            return !world.isRemote;
+        }
         if (world.isRemote) {
             local.freecaminteraction.client.FreecamClient.toggleFromItem();
         }
         return true;
+    }
+
+    /**
+     * 判断指定法杖是否安装有蓝图核心。
+     */
+    public static boolean hasBlueprintCore(ItemStack stack) {
+        if (stack == null || !(stack.getItem() instanceof ItemFreecamWand)) return false;
+        for (int i = 0; i < 4; i++) {
+            ItemStack core = getUpgradeCore(stack, i);
+            if (core != null && core.getItem() instanceof ItemBlueprintCore) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 获取法杖指定升级槽位（0..3）中的核心物品。
+     */
+    public static ItemStack getUpgradeCore(ItemStack stack, int slot) {
+        if (stack == null || slot < 0 || slot >= 4) return null;
+        if (!stack.hasTagCompound() || !stack.getTagCompound().hasKey("Upgrades", 9)) {
+            return null;
+        }
+        net.minecraft.nbt.NBTTagList list = stack.getTagCompound().getTagList("Upgrades", 10);
+        for (int i = 0; i < list.tagCount(); i++) {
+            net.minecraft.nbt.NBTTagCompound itemTag = list.getCompoundTagAt(i);
+            int s = itemTag.getByte("Slot") & 0xFF;
+            if (s == slot) {
+                return ItemStack.loadItemStackFromNBT(itemTag);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 从法杖 NBT 加载 4 个升级槽位数据。
+     */
+    public static ItemStack[] loadUpgrades(ItemStack stack) {
+        ItemStack[] cores = new ItemStack[4];
+        if (stack == null || !stack.hasTagCompound() || !stack.getTagCompound().hasKey("Upgrades", 9)) {
+            return cores;
+        }
+        net.minecraft.nbt.NBTTagList list = stack.getTagCompound().getTagList("Upgrades", 10);
+        for (int i = 0; i < list.tagCount(); i++) {
+            net.minecraft.nbt.NBTTagCompound itemTag = list.getCompoundTagAt(i);
+            int s = itemTag.getByte("Slot") & 0xFF;
+            if (s >= 0 && s < 4) {
+                cores[s] = ItemStack.loadItemStackFromNBT(itemTag);
+            }
+        }
+        return cores;
+    }
+
+    /**
+     * 将 4 个升级槽位数据保存至法杖 NBT。
+     */
+    public static void saveUpgrades(ItemStack stack, net.minecraft.inventory.IInventory inventory) {
+        if (stack == null || inventory == null) return;
+        net.minecraft.nbt.NBTTagCompound tag = stack.getTagCompound();
+        if (tag == null) {
+            tag = new net.minecraft.nbt.NBTTagCompound();
+            stack.setTagCompound(tag);
+        }
+        net.minecraft.nbt.NBTTagList list = new net.minecraft.nbt.NBTTagList();
+        for (int i = 0; i < 4 && i < inventory.getSizeInventory(); i++) {
+            ItemStack core = inventory.getStackInSlot(i);
+            if (core != null) {
+                net.minecraft.nbt.NBTTagCompound itemTag = new net.minecraft.nbt.NBTTagCompound();
+                itemTag.setByte("Slot", (byte) i);
+                core.writeToNBT(itemTag);
+                list.appendTag(itemTag);
+            }
+        }
+        if (list.tagCount() > 0) {
+            tag.setTag("Upgrades", list);
+        } else {
+            tag.removeTag("Upgrades");
+            if (tag.hasNoTags()) {
+                stack.setTagCompound(null);
+            }
+        }
+    }
+
+    /**
+     * 设置法杖指定升级槽位（0..3）中的核心物品（用于测试或快捷操作）。
+     */
+    public static void setUpgradeCore(ItemStack stack, int slot, ItemStack core) {
+        if (stack == null || slot < 0 || slot >= 4) return;
+        ItemStack[] cores = loadUpgrades(stack);
+        cores[slot] = core;
+        net.minecraft.inventory.InventoryBasic inv = new net.minecraft.inventory.InventoryBasic("tmp", false, 4);
+        for (int i = 0; i < 4; i++) {
+            inv.setInventorySlotContents(i, cores[i]);
+        }
+        saveUpgrades(stack, inv);
     }
 
     @Override
@@ -93,6 +213,15 @@ public class ItemFreecamWand extends Item {
                     + ": \u00A7f" + remaining + " / " + tier.maxDamage);
         } else {
             tooltip.add("\u00A7d" + StatCollector.translateToLocal("tooltip.freecam_interaction.infinite"));
+        }
+        ItemStack[] cores = loadUpgrades(stack);
+        int count = 0;
+        for (ItemStack c : cores) { if (c != null) count++; }
+        tooltip.add("\u00A7e" + StatCollector.translateToLocal("gui.freecam_interaction.wand_upgrade.slots") + ": \u00A7f" + count + " / 4");
+        for (int i = 0; i < 4; i++) {
+            if (cores[i] != null) {
+                tooltip.add("  \u00A77- " + cores[i].getDisplayName());
+            }
         }
     }
 

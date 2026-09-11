@@ -30,6 +30,7 @@ tasks.register('prepareNativeCache', Copy) {
     from layout.projectDirectory.dir('run/natives/lwjgl2')
     into nativeCache
 }
+def actionCheckMods = fileTree('run/mods') { include 'gregtech-*.jar' }
 def compileActionCheck = tasks.register('compileActionCheck', JavaCompile) {
     dependsOn tasks.named('classes')
     source = files('scripts/LegacyActionCheck.java')
@@ -37,10 +38,18 @@ def compileActionCheck = tasks.register('compileActionCheck', JavaCompile) {
     destinationDirectory = layout.buildDirectory.dir('action-checks')
     javaCompiler = javaToolchains.compilerFor { languageVersion = JavaLanguageVersion.of(8) }
 }
-tasks.register('actionCheck', JavaExec) {
+tasks.register('noGregTechActionCheck', JavaExec) {
     dependsOn tasks.named('classes'), compileActionCheck
     javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(8) }
     classpath = files(layout.buildDirectory.dir('action-checks')) + sourceSets.main.runtimeClasspath + sourceSets.main.compileClasspath
+    mainClass = 'LegacyActionCheck'
+    args 'no-gt'
+    jvmArgs '-ea', '-Dfile.encoding=UTF-8'
+}
+tasks.register('actionCheck', JavaExec) {
+    dependsOn tasks.named('classes'), compileActionCheck, tasks.named('noGregTechActionCheck')
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(8) }
+    classpath = files(layout.buildDirectory.dir('action-checks')) + sourceSets.main.runtimeClasspath + sourceSets.main.compileClasspath + actionCheckMods
     mainClass = 'LegacyActionCheck'
     jvmArgs '-ea', '-Dfile.encoding=UTF-8'
 }

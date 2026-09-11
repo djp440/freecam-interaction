@@ -68,6 +68,36 @@ public final class FreecamInteraction {
         return state != null ? state.tier : WandTier.NORMAL;
     }
 
+    public static int getActiveWandSlot(EntityPlayer player) {
+        if (player == null) return -1;
+        if (player.worldObj != null && player.worldObj.isRemote) {
+            if (!local.freecaminteraction.client.FreecamClient.isFreecamActive()) return -1;
+            ItemFreecamWand.WandEntry wand = ItemFreecamWand.findBestWand(player);
+            return wand != null ? wand.slot : -1;
+        }
+        State state = ACTIVE.get(player);
+        return (state != null && active(player)) ? state.selectedSlot : -1;
+    }
+
+    /**
+     * 蓝图施工资格：只要背包中存在任意一把装有蓝图核心的法杖即为真。
+     * 与 {@link ItemFreecamWand#findBestWand} 的语义一致：当前生效（耐久最优）的法杖可以是任一把，
+     * 蓝图核心只要求“已拥有”，不要求装在这一把上；否则背包中同时存在无核心法杖时会永久无法施工。
+     */
+    public static boolean hasBlueprintCoreWand(EntityPlayer player) {
+        if (player == null || !active(player)) return false;
+        if (player.inventory == null || player.inventory.mainInventory == null) return false;
+        ItemStack[] inventory = player.inventory.mainInventory;
+        int limit = Math.min(36, inventory.length);
+        for (int i = 0; i < limit; i++) {
+            ItemStack stack = inventory[i];
+            if (stack != null && stack.getItem() instanceof ItemFreecamWand && ItemFreecamWand.hasBlueprintCore(stack)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static boolean inside(EntityPlayer player, int x, int y, int z) {
         WandTier tier = getActiveTier(player);
         return y >= 0 && y < player.worldObj.getHeight() && player.worldObj.blockExists(x, y, z)
@@ -103,7 +133,7 @@ public final class FreecamInteraction {
         FreecamChunkLoader.ChunkSession session = FreecamChunkLoader.createSession(
                 FreecamInteractionMod.instance, player, wand.tier);
         if (session == null) {
-            channel.sendTo(new ModeAck(clientEpoch, false, 0, 0), player);
+            if (channel != null) channel.sendTo(new ModeAck(clientEpoch, false, 0, 0), player);
             ModLog.info("Server rejected freecam mode for " + player.getCommandSenderName() + ": chunk allocation failed");
             return;
         }
@@ -122,7 +152,7 @@ public final class FreecamInteraction {
         state.lastContainer = player.openContainer;
         cancelMining(player);
         player.theItemInWorldManager.setBlockReachDistance(256.0D);
-        channel.sendTo(new ModeAck(clientEpoch, true, wand.tier.ordinal(), wand.tier.radius), player);
+        if (channel != null) channel.sendTo(new ModeAck(clientEpoch, true, wand.tier.ordinal(), wand.tier.radius), player);
         ModLog.info("Server freecam enabled; player=" + player.getCommandSenderName() + "; tier=" + wand.tier.name() + "; slot=" + wand.slot);
     }
 
@@ -136,7 +166,7 @@ public final class FreecamInteraction {
         if (state != null) {
             FreecamChunkLoader.releaseSession(state.chunkSession);
             player.theItemInWorldManager.setBlockReachDistance(state.previousReach);
-            channel.sendTo(new ModeAck(0, false, 0, 0), player);
+            if (channel != null) channel.sendTo(new ModeAck(0, false, 0, 0), player);
             ModLog.info("Server freecam cleared; player=" + player.getCommandSenderName());
         }
     }
@@ -198,7 +228,7 @@ public final class FreecamInteraction {
                 state.tier = next.tier;
                 FreecamChunkLoader.releaseSession(state.chunkSession);
                 state.chunkSession = FreecamChunkLoader.createSession(FreecamInteractionMod.instance, player, next.tier);
-                channel.sendTo(new ModeAck(0, true, next.tier.ordinal(), next.tier.radius), player);
+                if (channel != null) channel.sendTo(new ModeAck(0, true, next.tier.ordinal(), next.tier.radius), player);
             }
             ModLog.info("Wand succeeded to slot=" + next.slot + "; tier=" + next.tier.name());
         } else {

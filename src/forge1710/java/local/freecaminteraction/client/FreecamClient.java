@@ -52,10 +52,22 @@ import org.lwjgl.opengl.Display;
 public final class FreecamClient {
     private static final Minecraft MC = Minecraft.getMinecraft();
     private static final KeyBinding TOGGLE = new KeyBinding("key.freecam_interaction.enter", Keyboard.KEY_G, "key.categories.freecam_interaction");
+    private static final KeyBinding KEY_BLUEPRINT = new KeyBinding("key.freecam_interaction.blueprint", Keyboard.KEY_B, "key.categories.freecam_interaction");
     private static final Field DISTANCE = ReflectionHelper.findField(EntityRenderer.class, "thirdPersonDistance", "field_78490_B");
     private static final Field PREVIOUS_DISTANCE = ReflectionHelper.findField(EntityRenderer.class, "thirdPersonDistanceTemp", "field_78491_C");
     private static FreecamClient instance;
     private static WandTier activeTier = WandTier.NORMAL;
+
+    public enum SelectionMode {
+        IDLE,
+        SELECTING_A,
+        SELECTING_B
+    }
+
+    private static SelectionMode selectionMode = SelectionMode.IDLE;
+    private static int[] pointA = null;
+    private static int[] pointB = null;
+
     private EntityClientPlayerMP player;
     private EntityOtherPlayerMP camera;
     private MovementInput previousInput;
@@ -75,8 +87,10 @@ public final class FreecamClient {
     public static void initialize() {
         instance = new FreecamClient();
         ClientRegistry.registerKeyBinding(TOGGLE);
+        ClientRegistry.registerKeyBinding(KEY_BLUEPRINT);
         FMLCommonHandler.instance().bus().register(instance);
         MinecraftForge.EVENT_BUS.register(instance);
+        MinecraftForge.EVENT_BUS.register(local.freecaminteraction.client.renderer.BlueprintGhostRenderer.INSTANCE);
         ModLog.info("Client initialized; lwjgl=" + Sys.getVersion() + "; librarypath=" + System.getProperty("org.lwjgl.librarypath"));
     }
 
@@ -86,6 +100,43 @@ public final class FreecamClient {
 
     public static WandTier currentTier() {
         return activeTier;
+    }
+
+    public static SelectionMode getSelectionMode() {
+        return selectionMode;
+    }
+
+    public static void setSelectionMode(SelectionMode mode) {
+        selectionMode = mode;
+        if (mode == SelectionMode.IDLE) {
+            pointA = null;
+            pointB = null;
+        }
+    }
+
+    public static int[] getPointA() {
+        return pointA;
+    }
+
+    public static int[] getPointB() {
+        return pointB;
+    }
+
+    public static void startSelection() {
+        selectionMode = SelectionMode.SELECTING_A;
+        pointA = null;
+        pointB = null;
+        local.freecaminteraction.client.renderer.BlueprintGhostRenderer.INSTANCE.cancelPlacementPreview();
+        ModLog.info("Entered blueprint selection mode: SELECTING_A");
+    }
+
+    public static void cancelSelection() {
+        if (selectionMode != SelectionMode.IDLE) {
+            ModLog.info("Cancelled blueprint selection mode");
+        }
+        selectionMode = SelectionMode.IDLE;
+        pointA = null;
+        pointB = null;
     }
 
     public static void onAck(int tierOrdinal, int radius) {
@@ -105,6 +156,15 @@ public final class FreecamClient {
         if (MC.renderViewEntity == MC.thePlayer) {
             instance.enter();
         }
+    }
+
+    public static Object getWandUpgradeGui(EntityPlayer player, int wandSlot) {
+        return new GuiWandUpgrade(player.inventory, wandSlot);
+    }
+
+    public static MovingObjectPosition getSelectionHit() {
+        if (instance == null || instance.selection == null) return null;
+        return instance.selection.hit;
     }
 
     public static MovingObjectPosition cameraRayTrace(net.minecraft.world.World world, Vec3 start, Vec3 end) {
@@ -208,6 +268,8 @@ public final class FreecamClient {
         armed = false;
         modeRequested = false;
         activeTier = WandTier.NORMAL;
+        cancelSelection();
+        local.freecaminteraction.client.renderer.BlueprintGhostRenderer.INSTANCE.cancelPlacementPreview();
         KeyBinding.unPressAllKeys();
         if (MC.currentScreen == null && MC.theWorld != null && Display.isActive()) MC.setIngameFocus();
     }
@@ -227,6 +289,11 @@ public final class FreecamClient {
             if (!Mouse.isButtonDown(0) && !Mouse.isButtonDown(1)) armed = true;
             return;
         }
+        // 选区或投放预览期间，禁止普通挖掘
+        if (selectionMode != SelectionMode.IDLE || local.freecaminteraction.client.renderer.BlueprintGhostRenderer.INSTANCE.isPlacementPreviewActive()) {
+            stopMining();
+            return;
+        }
         if (FreecamInteraction.acknowledged && Mouse.isButtonDown(0) && !dragging && selection.hit != null
                 && selection.hit.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) damageSelection();
         else if (leftMining) stopMining();
@@ -234,10 +301,34 @@ public final class FreecamClient {
 
     @SubscribeEvent
     public void keyboard(InputEvent.KeyInputEvent event) {
-        if (TOGGLE.isPressed() && !Keyboard.isRepeatEvent() && MC.currentScreen == null && MC.thePlayer != null
+        if (MC.currentScreen != null) return;
+
+        if (TOGGLE.isPressed() && !Keyboard.isRepeatEvent() && MC.thePlayer != null
                 && MC.thePlayer.isEntityAlive() && !MC.thePlayer.isPlayerSleeping()) {
             if (camera != null) exit("toggle");
             else if (MC.renderViewEntity == MC.thePlayer) enter();
+            return;
+        }
+
+        // B 键触发蓝图菜单或取消选区/预览
+        if (KEY_BLUEPRINT.isPressed() && !Keyboard.isRepeatEvent() && isFreecamActive()) {
+            if (selectionMode != SelectionMode.IDLE) {
+                cancelSelection();
+            } else if (local.freecaminteraction.client.renderer.BlueprintGhostRenderer.INSTANCE.isPlacementPreviewActive()) {
+                local.freecaminteraction.client.renderer.BlueprintGhostRenderer.INSTANCE.cancelPlacementPreview();
+            } else {
+                openBlueprintManager();
+            }
+            return;
+        }
+
+        // ESC 键取消选区或预览
+        if (Keyboard.isKeyDown(Keyboard.KEY_ESCAPE) && isFreecamActive()) {
+            if (selectionMode != SelectionMode.IDLE) {
+                cancelSelection();
+            } else if (local.freecaminteraction.client.renderer.BlueprintGhostRenderer.INSTANCE.isPlacementPreviewActive()) {
+                local.freecaminteraction.client.renderer.BlueprintGhostRenderer.INSTANCE.cancelPlacementPreview();
+            }
         }
     }
 
@@ -246,13 +337,110 @@ public final class FreecamClient {
         if (!control()) return;
         if (event.button == 2) { stopMining(); armed = false; }
         event.setCanceled(true);
-        if (event.buttonstate && event.button - 100 == TOGGLE.getKeyCode()) exit("toggle_mouse");
-        else if (event.button == 0 && event.buttonstate && overClose()) exit("close_button");
-        else if (event.dwheel != 0) player.inventory.changeCurrentItem(event.dwheel);
-        else if (event.button == 0) {
+
+        if (event.buttonstate && event.button - 100 == TOGGLE.getKeyCode()) {
+            exit("toggle_mouse");
+            return;
+        }
+        if (event.button == 0 && event.buttonstate) {
+            if (overClose()) {
+                exit("close_button");
+                return;
+            }
+            if (overBlueprintButton()) {
+                openBlueprintManager();
+                return;
+            }
+            if (overSelectButton()) {
+                if (selectionMode == SelectionMode.IDLE) {
+                    startSelection();
+                } else {
+                    cancelSelection();
+                }
+                return;
+            }
+        }
+
+        if (event.dwheel != 0) {
+            player.inventory.changeCurrentItem(event.dwheel);
+            return;
+        }
+
+        // 选区状态机与投放预览拦截
+        if (selectionMode == SelectionMode.SELECTING_A) {
+            if (event.button == 0 && event.buttonstate && armed) {
+                // 左键点击捕获方块 A
+                MovingObjectPosition hit = selection.hit;
+                if (hit != null && hit.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
+                    pointA = new int[] { hit.blockX, hit.blockY, hit.blockZ };
+                    selectionMode = SelectionMode.SELECTING_B;
+                    stopMining();
+                    player.swingItem();
+                    ModLog.info("Selection point A set: " + pointA[0] + "," + pointA[1] + "," + pointA[2]);
+                }
+            } else if (event.button == 1 && event.buttonstate) {
+                // 右键取消选区
+                cancelSelection();
+            }
+            return;
+        } else if (selectionMode == SelectionMode.SELECTING_B) {
+            if (event.button == 0 && event.buttonstate && armed) {
+                // 左键点击捕获方块 B
+                MovingObjectPosition hit = selection.hit;
+                if (hit != null && hit.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
+                    pointB = new int[] { hit.blockX, hit.blockY, hit.blockZ };
+                    stopMining();
+                    player.swingItem();
+                    ModLog.info("Selection point B set: " + pointB[0] + "," + pointB[1] + "," + pointB[2]);
+                    // 弹出蓝图保存对话框
+                    int x1 = pointA[0], y1 = pointA[1], z1 = pointA[2];
+                    int x2 = pointB[0], y2 = pointB[1], z2 = pointB[2];
+                    cancelSelection();
+                    MC.displayGuiScreen(new local.freecaminteraction.client.gui.GuiSaveBlueprint(x1, y1, z1, x2, y2, z2));
+                }
+            } else if (event.button == 1 && event.buttonstate) {
+                // 右键取消选区
+                cancelSelection();
+            }
+            return;
+        } else if (local.freecaminteraction.client.renderer.BlueprintGhostRenderer.INSTANCE.isPlacementPreviewActive()) {
+            if (event.button == 0 && event.buttonstate && armed) {
+                MovingObjectPosition hit = selection.hit;
+                if (hit != null && hit.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
+                    int tx = hit.blockX;
+                    int ty = hit.blockY;
+                    int tz = hit.blockZ;
+                    Block b = MC.theWorld.getBlock(tx, ty, tz);
+                    if (b != null && !b.isAir(MC.theWorld, tx, ty, tz) && !b.isReplaceable(MC.theWorld, tx, ty, tz)) {
+                        tx += net.minecraft.util.Facing.offsetsXForSide[hit.sideHit];
+                        ty += net.minecraft.util.Facing.offsetsYForSide[hit.sideHit];
+                        tz += net.minecraft.util.Facing.offsetsZForSide[hit.sideHit];
+                    }
+                    stopMining();
+                    player.swingItem();
+                    local.freecaminteraction.client.renderer.BlueprintGhostRenderer.INSTANCE.onPlacementClick(tx, ty, tz);
+                }
+            } else if (event.button == 1 && event.buttonstate) {
+                local.freecaminteraction.client.renderer.BlueprintGhostRenderer.INSTANCE.cancelPlacementPreview();
+            }
+            return;
+        }
+
+        // 普通建造与挖掘操作
+        if (event.button == 0) {
             if (event.buttonstate && armed && FreecamInteraction.acknowledged) startMining();
             else if (!event.buttonstate) stopMining();
-        } else if (event.button == 1 && event.buttonstate && armed && FreecamInteraction.acknowledged) useSelection();
+        } else if (event.button == 1 && event.buttonstate && armed && FreecamInteraction.acknowledged) {
+            useSelection();
+        }
+    }
+
+    public static void openBlueprintManager() {
+        if (instance != null && instance.current()) {
+            instance.stopMining();
+            instance.armed = false;
+            MC.displayGuiScreen(new local.freecaminteraction.client.gui.GuiBlueprintManager());
+        }
     }
 
     private void startMining() {
@@ -403,6 +591,22 @@ public final class FreecamClient {
         return !MC.gameSettings.hideGUI && x >= resolution.getScaledWidth() - 30 && x < resolution.getScaledWidth() - 6 && y >= 6 && y < 30;
     }
 
+    private boolean overBlueprintButton() {
+        ScaledResolution resolution = new ScaledResolution(MC, MC.displayWidth, MC.displayHeight);
+        int x = Mouse.getX() * resolution.getScaledWidth() / MC.displayWidth;
+        int y = resolution.getScaledHeight() - Mouse.getY() * resolution.getScaledHeight() / MC.displayHeight - 1;
+        int width = resolution.getScaledWidth();
+        return !MC.gameSettings.hideGUI && x >= width - 82 && x < width - 36 && y >= 6 && y < 30;
+    }
+
+    private boolean overSelectButton() {
+        ScaledResolution resolution = new ScaledResolution(MC, MC.displayWidth, MC.displayHeight);
+        int x = Mouse.getX() * resolution.getScaledWidth() / MC.displayWidth;
+        int y = resolution.getScaledHeight() - Mouse.getY() * resolution.getScaledHeight() / MC.displayHeight - 1;
+        int width = resolution.getScaledWidth();
+        return !MC.gameSettings.hideGUI && x >= width - 134 && x < width - 88 && y >= 6 && y < 30;
+    }
+
     @SubscribeEvent
     public void crosshair(RenderGameOverlayEvent.Pre event) {
         if (event.type == RenderGameOverlayEvent.ElementType.CROSSHAIRS && current()) {
@@ -418,9 +622,31 @@ public final class FreecamClient {
         String wandName = I18n.format("item.freecam_interaction.wand_" + activeTier.id + ".name");
         String title = I18n.format("screen.freecam_interaction.title") + " [" + wandName + "]";
         MC.fontRenderer.drawStringWithShadow(title, 8, 8, 0xE6F8F5);
-        String help = I18n.format(FreecamInteraction.acknowledged ? "screen.freecam_interaction.help" : "screen.freecam_interaction.unsupported",
-                GameSettings.getKeyDisplayString(TOGGLE.getKeyCode()));
-        MC.fontRenderer.drawSplitString(help, 8, 22, Math.max(1, width - 52), 0xE6F8F5);
+
+        String help;
+        if (selectionMode == SelectionMode.SELECTING_A) {
+            help = I18n.format("screen.freecam_interaction.hud_selecting_a");
+        } else if (selectionMode == SelectionMode.SELECTING_B) {
+            help = I18n.format("screen.freecam_interaction.hud_selecting_b");
+        } else if (local.freecaminteraction.client.renderer.BlueprintGhostRenderer.INSTANCE.isPlacementPreviewActive()) {
+            help = I18n.format("screen.freecam_interaction.hud_preview");
+        } else {
+            help = I18n.format(FreecamInteraction.acknowledged ? "screen.freecam_interaction.help" : "screen.freecam_interaction.unsupported",
+                    GameSettings.getKeyDisplayString(TOGGLE.getKeyCode()));
+        }
+        MC.fontRenderer.drawSplitString(help, 8, 22, Math.max(1, width - 140), 0xE6F8F5);
+
+        // 选区模式按钮 (右上角宽 42)
+        boolean inSelect = (selectionMode != SelectionMode.IDLE);
+        int selColor = inSelect ? 0xFF2A7545 : (overSelectButton() ? 0xFF487C78 : 0xD9101C29);
+        Gui.drawRect(width - 134, 6, width - 88, 30, selColor);
+        MC.fontRenderer.drawStringWithShadow(I18n.format("screen.freecam_interaction.btn_select"), width - 128, 14, 0xFFFFFF);
+
+        // 蓝图管理按钮 (右上角宽 42)
+        Gui.drawRect(width - 82, 6, width - 36, 30, overBlueprintButton() ? 0xFF487C78 : 0xD9101C29);
+        MC.fontRenderer.drawStringWithShadow(I18n.format("screen.freecam_interaction.btn_blueprint"), width - 76, 14, 0xFFFFFF);
+
+        // 关闭 X 按钮
         Gui.drawRect(width - 30, 6, width - 6, 30, overClose() ? 0xFF487C78 : 0xD9101C29);
         MC.fontRenderer.drawStringWithShadow("X", width - 21, 14, 0xFFFFFF);
     }

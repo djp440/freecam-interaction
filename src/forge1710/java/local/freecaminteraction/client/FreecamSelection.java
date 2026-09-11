@@ -73,7 +73,35 @@ public final class FreecamSelection {
             GL11.glColor4f(0.65F, 0.95F, 0.9F, 0.35F);
             RenderGlobal.drawOutlinedBoundingBox(AxisAlignedBB.getBoundingBox(minX, 0, minZ, maxX, 256, maxZ), -1);
 
-            if (hit != null) {
+            // 绘制选区长方体或点 A 标记
+            FreecamClient.SelectionMode selMode = FreecamClient.getSelectionMode();
+            if (selMode == FreecamClient.SelectionMode.SELECTING_B && FreecamClient.getPointA() != null) {
+                int[] a = FreecamClient.getPointA();
+                if (hit != null && hit.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
+                    // 已选 A，正在悬停 B：绘制整个闭合长方体线框
+                    int bX = hit.blockX, bY = hit.blockY, bZ = hit.blockZ;
+                    int rMinX = Math.min(a[0], bX), rMaxX = Math.max(a[0], bX) + 1;
+                    int rMinY = Math.min(a[1], bY), rMaxY = Math.max(a[1], bY) + 1;
+                    int rMinZ = Math.min(a[2], bZ), rMaxZ = Math.max(a[2], bZ) + 1;
+                    GL11.glLineWidth(2.5F);
+                    GL11.glColor4f(1.0F, 0.85F, 0.2F, 0.95F);
+                    RenderGlobal.drawOutlinedBoundingBox(AxisAlignedBB.getBoundingBox(rMinX, rMinY, rMinZ, rMaxX, rMaxY, rMaxZ), -1);
+                } else {
+                    // 仅绘制点 A 高亮框
+                    GL11.glLineWidth(2.5F);
+                    GL11.glColor4f(1.0F, 0.85F, 0.2F, 0.95F);
+                    RenderGlobal.drawOutlinedBoundingBox(AxisAlignedBB.getBoundingBox(a[0], a[1], a[2], a[0] + 1, a[1] + 1, a[2] + 1), -1);
+                }
+            } else if (selMode == FreecamClient.SelectionMode.SELECTING_A) {
+                // 正在选 A 阶段：若有悬停方块，以金黄色高亮预选
+                if (hit != null && hit.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
+                    GL11.glLineWidth(2.0F);
+                    GL11.glColor4f(1.0F, 0.9F, 0.3F, 0.85F);
+                    RenderGlobal.drawOutlinedBoundingBox(AxisAlignedBB.getBoundingBox(hit.blockX, hit.blockY, hit.blockZ, hit.blockX + 1, hit.blockY + 1, hit.blockZ + 1), -1);
+                }
+            }
+
+            if (hit != null && selMode == FreecamClient.SelectionMode.IDLE) {
                 if (hit.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
                     Block block = mc.theWorld.getBlock(hit.blockX, hit.blockY, hit.blockZ);
                     block.setBlockBoundsBasedOnState(mc.theWorld, hit.blockX, hit.blockY, hit.blockZ);

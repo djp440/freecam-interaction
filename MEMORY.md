@@ -1,5 +1,153 @@
 # 项目记忆
 
+- 2026-09-11 21:14：修复 AE2 线缆蓝图“已采集但预览缺失、施工全部失败”的回归。
+  - 用户日志中的 `blocks=3; parts=8` 证明采集、BPFC 与切片传输正常；根因一是 `BlueprintGhostRenderer` 只遍历方块条目，而 AE2 总线宿主按设计不重复保存为方块条目。渲染器现额外按坐标去重绘制部件宿主格，纯 AE2 线缆位置也会显示；与普通方块/GT 宿主重合时不叠加。
+  - 根因二是 `BlueprintPartSupport.optionalGet` 从包私有 Guava `Present` 实现类反射公开 `get()`，Java 8 仍会抛 `IllegalAccessException`。现缓存并通过公开 `com.google.common.base.Optional` 基类的 `get()` 方法调用；`LegacyActionCheck` 使用真实 `Optional.of` 覆盖该回归。
+  - 主调度器同步调整为部件安装成功后才扣法杖耐久；安装失败归还预扣材料且不再白扣耐久。
+  - 验证：`pwsh -File scripts/forge1710.ps1 smoke` 与 `pwsh -File scripts/lwjgl3ify.ps1 smoke` 均 BUILD SUCCESSFUL；构建 JAR 与 lwjgl3ify 实例 JAR SHA-256 均为 `2c31b139c84aa8a0c35fc1c9373a29b2964ed4cf7fc60db8b45a1ed72df165cf`。用户现有 `testae2` 蓝图已有 8 个 parts，无需重新采集，重启实例后可直接复测预览和施工。
+
+- 2026-09-11 20:57：修复 GT5U 5.09.31 蓝图覆盖板缺失与机器朝向错误，完成纯反射实现及自动化回归。
+  - 新增 `BlueprintGregTechSupport`，运行时反射 `IGregTechTileEntity` / `ICoverable`：机器正面通过 `getFrontFacing/isValidFacing/setFrontFacing` 采集与恢复；覆盖板逐面通过 `getCoverItemAtSide/getCoverDataAtSide` 采集，通过 `canPlaceCoverItemAtSide/setCoverItemAtSide/setCoverDataAtSide/issueCoverUpdate` 安装并同步。
+  - 朝向不再白名单复制原始 `mFacing`，而是保存 Mod 自有键 `freecamGtFrontFacing`；`VanillaBlueprintAdapter.place` 与调度器 `FINALIZE_CONFIG` 共用 `applyStaticConfiguration`，该键只会走 `setFrontFacing`，绝不会进入 `readFromNBT`，继续保护 `mID`、库存、流体、能量、进度和主人字段。
+  - GT 覆盖板复用现有 `BlueprintPartEntry` / BPFC v1：`partId` 带 `gregtech-cover:` 前缀，物料保存物品注册名与 damage，`configTag` 保存 `coverData`，不持久化 `mCoverSides` 运行时数字 ID；采集时追加 PARTS 条目但继续保存宿主机器方块。已有同类型覆盖板会幂等校正 `coverData`，不重复扣料或耐久。
+  - `BlueprintPartSupport` 按条目类型分发 AE2 与 GT；备用 `BlueprintBuildExecutor.executePartStepDirect` 修正为安装成功后才提交预留物料和扣耐久，安装失败保持物料与耐久不变。主调度器仍按 SOLID/ATTACHED -> PARTS -> FINALIZE_CONFIG 顺序执行，覆盖板失败归还材料。
+  - `LegacyActionCheck` 使用 GT 接口动态代理验证 facing=4 的采集/恢复、两个覆盖板的 side/damage/coverData、安装/幂等、四单元依赖顺序、BPFC v1 往返及部件失败事务；新增无 GT 类路径的独立进程检查，确认缺少 GT 时只禁用、不产生类加载错误。主源码和产物经 jdeps 核对无 GT 静态类型依赖。
+  - 验证：`pwsh -File scripts/forge1710.ps1 smoke` BUILD SUCCESSFUL；`pwsh -File scripts/lwjgl3ify.ps1 smoke` BUILD SUCCESSFUL。构建 JAR 与 lwjgl3ify 实例 JAR SHA-256 均为 `390d990c6455e8a03606d6308bf716f8bf6a7b9016cd658959e1b17a010d3076`。现有世界的只读诊断仍按预期返回旧结果 FAIL（source facing=4 / built=2，两个 built covers 全 0），因为 `Blueprint_2074_gt` 与既有施工结构永久缺失数据；必须用仍存在的源结构重新采集并施工后才能做最终实机 PASS 验收。
+
+- 2026-09-11 18:17：补齐 GT 黑紫块修复遗漏的调度器最终配置路径；18:07 的首次修改只保护了 `VanillaBlueprintAdapter.place/matches`，但 `BlueprintBuildScheduler.executeFinalizeUnit` 仍会直接读取旧蓝图原始 `tileTag` 并第二次回灌。
+  - `generateDependencySortedPlan` 现仅在 `VanillaBlueprintAdapter.sanitizeTileTag(entry.getTileTag()) != null` 时生成 `FINALIZE_CONFIG`；旧 GT 蓝图中只有 `id` 的残缺 tag 因而从 8 个施工单元降为 4 个纯放置单元。
+  - `executeFinalizeUnit` 同样先重新消毒，再决定是否 `readFromNBT`，形成执行期纵深保护；即使异常计划或会话已包含 FINALIZE_CONFIG，也不会清空 MTE。
+  - `scripts/LegacyActionCheck.java` 新增旧 id-only 蓝图执行计划断言：1 个方块条目只能产生 1 个非 FINALIZE_CONFIG 单元。首次测试因无引导测试进程中 `Blocks.stone == null` 被当作空气而失败，改用已有 `RayBlock(Material.rock)` 测试桩后通过。
+  - 最终验证：`pwsh -File scripts/forge1710.ps1 smoke` → BUILD SUCCESSFUL；`pwsh -File scripts/lwjgl3ify.ps1 smoke` → BUILD SUCCESSFUL；`git diff --check` 仅既有 CRLF 提示；构建与实例 JAR SHA-256 均为 `13db0ec9a44c2657e5fe1d260321e9cb157eaa91e3068e296d999166fc24abb6`。
+
+- 2026-09-11 18:07：第三次定位并修复 GT 蓝图机器建成黑紫块；本次根因由实机日志与真实蓝图 NBT 双重确认，不再归因机器 ID。
+  - 实机证据：`logs/freecam_interaction/2026-09-11 17-54-41.log` 中新采集 `Blueprint_2074_gt` 为 4 个方块，施工 `totalUnits=8`；4 次 `GT_Item_Machines.placeBlockAt` 均携带正确 ID（136/5162/5162/128）且返回 `ok`，任务 0 冲突仍变黑紫。8 个单元恰好是 4 次方块放置 + 4 次 `FINALIZE_CONFIG`。
+  - 蓝图文件证据：解析 lwjgl3ify 存档 `.../freecam_interaction/blueprints/4bd03cd7-.../26ed4439-....dat` 的 GZIP NBT 后确认，每个 GT 方块物料 damage 正确，但 `tile` 只剩 `{id: BaseMetaTileEntity}` 或 `{id: BaseMetaPipeEntity}`；关键 `mID` 已被白名单消毒丢弃。
+  - 根因链：`GT_Item_Machines.placeBlockAt` 先正确创建 MTE → `VanillaBlueprintAdapter.place` 立即把仅含 `id`+坐标的不完整 NBT `readFromNBT` 回新 TE → `BlueprintBuildScheduler.executeFinalizeUnit` 又回灌一次 → 缺失 `mID` 清空刚创建的 MTE，产生黑紫块。
+  - 修复（`src/forge1710/java/local/freecaminteraction/blueprint/VanillaBlueprintAdapter.java`）：`sanitizeTileTag` 新增 `hasSafeConfiguration`，只有 id 而没有任何白名单配置键时返回 null；`place` 对持久化旧蓝图中的 `tileTag` 先再次 `sanitizeTileTag`，残缺 tag 只记 `Skipped incomplete TileEntity config` 而不回灌；`matches` 同样先重消毒期望 tag，残缺配置不参与匹配。这样新蓝图不会生成无意义的 FINALIZE_CONFIG，当前存档中旧的 GT 蓝图也可安全施工，不要求再次采集。
+  - 回归检查：`scripts/LegacyActionCheck.java` 增加 id-only NBT 必须被拒绝的断言；`pwsh -File scripts/forge1710.ps1 smoke` → BUILD SUCCESSFUL；`pwsh -File scripts/lwjgl3ify.ps1 smoke` → BUILD SUCCESSFUL 且把新 JAR 同步到实例。构建 JAR 与实例 `mods/freecam_interaction.jar` SHA-256 均为 `89c33b584b2c36f179f368e8699d42c00f909bb6601d538e549422d8f7ea694c`；`git diff --check` 仅有既有行尾警告，无错误。
+  - 仍明确延后：GT 朝向、覆盖板、管道连接与其它配置的安全白名单恢复；当前只保证机器类型/MTE 正确且不复制资源。
+
+- 2026-09-11 17:50：上一轮 AE2/GT 修复在实机验证中“未生效”，取证后修复并重新交付。
+  - 取证源：用户 17:24-17:27 游戏会话日志（`logs/freecam_interaction/2026-09-11 17-24-40.log`）。
+  - AE2 问题定性：**不是代码未生效，是测试用了旧蓝图**。日志显示该局只新采集了 1 个蓝图（`Blueprint_1261_test_greg; blocks=4`），AE2 施工用的是启动时从存档加载的旧蓝图（`Blueprint_9135`/`Blueprint_7844`）；旧数据采集于部件管道存在之前，线缆被记成“总线方块条目”，建造出来是无部件的空总线（不可见），所以部件永远不出现。**旧 AE2 蓝图无法升级，必须重新框选采集**。AE2 侧反射链已用字节码复核：`CableBusContainer.addPart` 对线缆直接 `setCenter`（与传入方向无关，UNKNOWN 正确）、`canAddPart` 对 UNKNOWN 放行、要求 item instanceof IPartItem。
+  - GT 问题定性：真 bug。`GT_Item_Machines.placeBlockAt` 字节码 offset 10 `ifle 195`：`getDamage(stack)<=0` 时不创建 MTE，自己 `setBlock(block,0,3)` 后**返回 true**（复现黑紫且无 conflicts）。而 GT 机器的**世界 metadata 只是基型编号（getTileEntityBaseType），机器身份在物品堆 damage**；`GT_Block_Machines` 未覆写 getPickBlock，原采集物料 damage 拿到的是 damageDropped(meta)≈0 → GT 走了空 ID 分支。
+  - 修复（`VanillaBlueprintAdapter`）：新增 `public static int teItemIdOverride(TileEntity)`，鸭子类型反射读 TE 的 `getMetaTileID()`（不引用模组类）；`resolveMaterials(..., TileEntity te)` 用它补正采集物料的 damage（pickStack.setItemDamage 或回退路径直接用 override）。**注意坑：反射 invoke 对包私有实现类会抛 IllegalAccessException（测试匿名类暴露），必须 `m.setAccessible(true)`。**
+  - 观测补强：`placeModdedViaItemHook` 现在记录每次模组方块放置的 `ok/FAILED + 注册名@damage + 坐标`（此前静默回退不可观测）；`BlueprintNetwork` 采集日志增加 `parts=` 计数。
+  - 冒烟补强（`scripts/LegacyActionCheck.java` 蓝图段）：`teItemIdOverride` 对 null/普通 TileEntity 返回 -1、对带 getMetaTileID() 的匿名 TE 返回 4242。离线单测时若要实例化 TileEntity 需在 classpath 加 `build/rfg/recompiled_minecraft-1.7.10.jar` + log4j-api/core 2.0-beta9-fixed + guava，且 Windows java 用 cygpath 转换缓存 jar 路径。
+  - 旧蓝图（GT 与 AE2 均）不含机器 ID/部件数据，不可升级，需重新采集。验证：`pwsh -File scripts/forge1710.ps1 smoke` → BUILD SUCCESSFUL（Exit 0）。仍待实机复测：新采集的 AE2 选区（日志应出现 parts=N>0）与 GT 机器（日志应出现 `modded ItemBlock place ok for ...@机器ID`）。
+
+- 2026-09-11 17:27：修复了阻断子代理的环境故障（非本项目代码，但影响本项目开发）。
+  - 现象：`acp_delegate` 全部失败，stderr = `Failed to load extension "C:\Users\15575\.pi\agent\extensions\cbmem.ts": ParseError: Identifier 'BIN' has already been declared. cbmem.ts:305:6`；`subagent` 工具则因另一个无关原因失败：`option '-p, --port <port>' argument '--no-session' is invalid`（该工具调用 pi 时参数拼接有误，未修）。
+  - 根因：`~/.pi/agent/extensions/cbmem.ts`（全局自动发现目录 `~/.pi/agent/extensions/*.ts`）里存在**两代生成内容**：第 1-297 行是旧版（用 `execute(toolCallId, params, signal, onUpdate, ctx)` + `label/description/parameters`，BIN = `C:/Users/15575/.local/bin/...`），第 298-349 行是被追加的 `// codebase-memory-mcp:start` 生成块（用 `registerTool({ name, run })`，BIN = `C:/Users/15575/AppData/Local/Programs/...`）。两段各自 `import { spawn }` + `const BIN` → 模块级重复声明 → 整个扩展文件解析失败 → 所有加载它的 pi 进程（含子代理）启动即死。
+  - 关键取证：pi 0.85.1 只读 `definition.execute`（`@earendil-works/pi-coding-agent/dist/core/tools/tool-definition-wrapper.js` 中 `execute: (…) => definition.execute(…)`，全文不读 `run`）→ 追加块的 15 个 `run` 式注册即使能解析也无法被调用，两代工具名集合完全一致（均 15 个，`diff` 无差异）。因此保留旧段、删掉追加块。
+  - 修复：`sed -i '298,$d'`，备份为 `cbmem.ts.bak-20260911-172641`（296140288 字节的两个二进制均可正常响应 `cli list_projects`）。
+  - 验证：`bun build cbmem.ts` 通过；用 bun 模拟 pi 加载器 → `loaded tools: 15`、`all have execute(): true`；实调 `list_projects`（返回 29 个项目）与 `index_status` 均成功；**端到端** `acp_delegate`（researcher，exit 0）首次成功。
+  - 遗留：git 历史里两个二进制大小完全相同，推测更新器（写 `codebase-memory-mcp:start` 块的那个）会**追加**而非替换，下次安装/更新可能再次产生重复声明（同一故障复发）；且新建/更新后的块仍然用 pi 不认的 `run` 键。
+  - 附带观察：主会话与子代理会话都看不到 `search_graph`/`index_status` 等图谱工具（扩展已可加载，推测被 `~/.pi/agent/settings.json` 的 `defaultTools: [read, bash, edit, write]` 或代理工具白名单过滤）；本轮未改动该配置。
+
+- 2026-09-11 17:25：修复模组方块/部件建造缺陷（用户人工测试反馈：“来自ae2的线缆、线缆锚、面板完全无法被建造出来，建造任务会显示完工，但是完全没有出现这些方块；而来自gt5的机器，建造出来则会直接变成黑紫块”）。
+  - 根因 A（AE2 部件根本没进管道）：`blueprint/network/BlueprintCaptureHelper.capture` 的采集循环只调 `vanillaAdapter.capture`，`partEntries` 从未被填充；`blueprint/build/BlueprintBuildScheduler.installPartOnHost` 是空壳反射（只判 `getPart` 是否存在后无条件 `return true`）；`blueprint/build/BlueprintBuildExecutor.executePartStepDirect` 更彻底：只做权限/锁/扣料/扣耐久就 `BuildResult.success()	`，完全不碰世界。即“扣了材料与耐久但什么都没建”。
+  - 根因 B（GT 机器黑紫块）：放置走 `VanillaBlueprintAdapter.place` 的 `world.setBlock(block, meta, 3)`。GT 机器的 MTE 只在 `GT_Item_Machines.placeBlockAt` 内创建（`getDamage(stack)` → `GregTech_API.METATILEENTITIES[damage]` → `setBlock` → `getTileEntity` → checkcast `IGregTechTileEntity`），只 setBlock 得到无 MTE 的残缺 TE → 渲染黑紫。
+  - 修复 A（新增 `blueprint/BlueprintPartSupport.java`，纯反射访问 AE2，未加任何编译期依赖）：`isPartHost(TileEntity)`（`appeng.api.parts.IPartHost` 实例判定）、`captureParts(te,dx,dy,dz)`（遍历 side 0..5 与 `SIDE_CENTER=6`，用 `IPart.getItemStack(PartItemStack.World)` 取部件物品并生成 `BlueprintPartEntry`）、`matchesInstalled(...)`（幂等跳过）、`installPart(...)`（宿主缺失时用 `AEApi.instance().definitions().blocks().multiPart()` 的 `maybeBlock/maybeItemBlock/maybeStack(1)` 自建总线方块，再 `IPartHost.addPart(ItemStack, ForgeDirection, EntityPlayer)`，最后 `getPart(side)` 复核类型一致）、`canSelfHost(...)`（仅 `IPartItem` 有资格自建宿主）。`BlueprintCaptureHelper` 对 `isPartHost` 命中位置 `continue` 跳过方块条目（避免同一根线缆被方块+部件各扣一次料）。`BlueprintBuildScheduler.executePartUnit` 改为：宿主守卫允许空位（限 `canSelfHost`）→ `matchesInstalled` 幂等跳过 → 扣料 → `installPart` 失败时 `refundMaterials` 并记 `session.conflicts`；删除空壳 `installPartOnHost`。`BlueprintBuildExecutor.executePartStepDirect` 补上真实安装，失败返回 `CONFLICT_OR_BLOCKED`。
+  - 修复 B（`VanillaBlueprintAdapter.place`）：新增 `placeModdedViaItemHook(...)`，注册名非 `minecraft:` 前缀且物品是 `ItemBlock` 时改走 `ItemBlock.placeBlockAt(stack, player, world, x,y,z, 2, 0.5f,0.5f,0.5f, meta)`，样品物品取采集时记录的实际物料（`sampleStackFor` → `MaterialRequirement.createSampleStack`，模组机器的损伤值即机器 ID）；返回 false 时回退原 `setBlock`。**原版方块（`minecraft:` 前缀）刻意不改路径**，避免触发原版 `onBlockPlacedBy` 的额外行为（例如箱子自动连体）而回退已验收通过的摆放功能。
+  - 关键 API 事实（javap 取证，`run/mods/appliedenergistics2-rv3-beta-6.jar`）：`CableBusContainer.getPart(dir)` 对 `ForgeDirection.UNKNOWN` 返回 `getCenter()`（线缆本体）、否则 `getSide(dir)`；`addPart` 内部先 `canAddPart` 且要求 `item instanceof IPartItem`；`PartItemStack` 常量集 = `Pick/Break/Wrench/Network/World`；`IDefinitions.blocks()` → `IBlocks.multiPart()` → `ITileDefinition extends IBlockDefinition extends IItemDefinition`（`maybeBlock/maybeItemBlock/maybeStack(int)`）。`GT_Item_Machines extends ItemBlock` 且**只有**它覆写了 `placeBlockAt(ItemStack,EntityPlayer,World,int,int,int,int,float,float,float,int)`。
+  - 设计决策（带理由）：①不新增 GT/AE2 适配器类或注册表——GT 的根因是“放置绕过了物品放置钩子”，在共享的 `place` 路径修一次即可覆盖所有模组机器（ponytail：不为单一实现造接口）；②不用 `PartPlacement.place`/`IPartHelper.placeBus` 走鼠标点击语义（其 `side` 在“点击方块面”与“目标槽位”间双关，服务端还会 `getOpposite()`，语义无法确定），改为直接 `addPart`；③不采集部件配置 NBT（AE2 接口等部件 NBT 内含物品库存，按名删键无法保证不复制资源），仅按部件物品+损伤值重建类型；④中心槽位用 `side=6` 表示（`BlueprintPartEntry.side` 语义由 0..5 扩展为 0..6），存储格式未变（仍是 int）。
+  - 冒烟补强（`scripts/LegacyActionCheck.java` 蓝图核心段）：`SIDE_CENTER == 6`、`ForgeDirection.getOrientation(6) == UNKNOWN`（中心槽位映射这一设计前提）、`partIdOf(null) == ""`、`partIdOf` = 注册名+":"+损伤值、以及 `isPartHost(null)/captureParts(null)/matchesInstalled(null)/installPart(null)/canSelfHost(null|part)` 全部安全返回而不抛异常（无 AE2 环境降级为禁用，与 PLAN :144 一致）。
+  - 验证：`pwsh -File scripts/forge1710.ps1 build` 与 `smoke` → BUILD SUCCESSFUL（Exit 0）；Ray/Drop/Collision/AE2/WandUpgrade/BlueprintCore/Storage/Network/BuildExecutor/Legacy 全项通过；冒烟日志确认无 AE2 时打印 `BlueprintPartSupport: AE2 API unavailable, part support disabled`。**未做游戏内人工验收**（AE2 线缆/锚/面板实机建造、GT 机器实机建造）。
+  - 本轮明确延后（需用户确认优先级）：GT 机器配置 NBT 白名单恢复（含朝向，`placeBlockAt` 目前统一传 `side=2` 水平面）、GT 覆盖板与管道各面断通、AE2 部件配置 NBT（优先级/过滤/P2P）、部件通信（`PacketBlueprintSlice`/`PacketBlueprintListResponse` 中无 part 字段，客户端拿不到部件 → 部件虚影不显示、客户端物料统计偏少）、`executeBatch` 完工判定只数 `blockEntries`（该方法是**无调用者的备用路径**，仅被冒烟脚本调用）。
+
+- 2026-09-11 16:59：完工任务不再保留在任务列表中（用户人工测试反馈："已经完成的任务仍然会留在列表里，并且点击建造时会弹出提示。我认为我们不需要保留已完成的任务，它们实际没有追溯价值"）。
+  - 根因：`blueprint/build/BlueprintBuildScheduler.onServerTick()` 在 `session.isFinished()` 时只做了 `task.setStatus(STATUS_COMPLETED)` + `broadcastTaskStatus`（upsert 同步），任务仍留在 `blueprint/network/BlueprintTaskManager.TASKS` 中。列表与虚影都由此 Map 驱动，所以已完工任务永久滞留，再点"建造施工"只会撞到 startBuild 的终态校验并提示"该建造任务不存在或已结束"（`message.freecam_interaction.bp.task_unavailable`）。
+  - 修复：完工分支改为与"取消"同路径——`BlueprintTaskManager.removeTask(taskId)` + `BlueprintNetwork.broadcastTaskRemove(finished, 64.0D)`，并给施工者发 `message.freecam_interaction.bp.task_completed` 聊天反馈（任务从列表与虚影中消失，必须给回执，否则看起来像任务丢失）。`BlueprintNetwork.broadcastTaskRemove` 由 `private` 改为 `public`（跨包调用）。
+  - 同时把 `BlueprintBuildScheduler.notifyRejected()` 重命名为 `notifyPlayer()`（现在也用于成功回执，原名会误导），共 13 处调用点用 sed 同步。
+  - 保留不变：暂停/缺料/超出范围/区块未加载的任务仍为 STATUS_PENDING 留在列表中（有继续施工价值）；`ACTION_CANCEL` 路径未动。
+  - 已知无关分支：`blueprint/build/BlueprintBuildExecutor.executeBatch` 是**没有调用者的备用路径**（仅被冒烟脚本调用），它仍会把 `storage.BlueprintTask` 置为 `COMPLETED` 并 `saveTask` 到存档；GUI 列表只读 `network.BlueprintTaskManager.getTasksVisibleTo`，两者不发生交互。若日后启用该路径，需同步套用"完工即移除"。
+  - 冒烟补强（`scripts/LegacyActionCheck.java` 的 `networkChecks()`）：在监听器计数断言之后新增完工移除通路验证——先 `updateTask(syncUpsert)` 入列，再 `updateTask(syncRemove)`，断言 `getTask("task-99") == null` 且 `getAllTasks().isEmpty()`。注意插入位置必须在 `listenerCalled[0]` 计数断言之后（否则会打乱监听器计数）。
+  - 验证：`pwsh -File scripts/forge1710.ps1 smoke` → BUILD SUCCESSFUL（Exit 0）。
+
+- 2026-09-11 16:58：放宽蓝图施工资格判定——"背包中任意一把法杖装有蓝图核心即可施工"（用户人工测试反馈）。
+  - 问题：`FreecamInteraction.hasActiveBlueprintCore()` 只看**当前生效法杖**（`getActiveWandSlot` = 服务端 `State.selectedSlot`，由 `ItemFreecamWand.findBestWand` 按 创造>高级>普通、同级按槽位 选出）。因此背包里只要同时存在一把无核心的“更好/更前”的法杖，生效法杖就落在它身上，即使用户背包里另有一把装了核心的法杖也永久提示"未安装蓝图核心"。
+  - 修复（`src/forge1710/java/local/freecaminteraction/FreecamInteraction.java`）：重写该判定位并**改名**为 `hasBlueprintCoreWand(EntityPlayer)`，遍历 `player.inventory.mainInventory` 的 0..35 槽，只要任一把是 `ItemFreecamWand` 且 `ItemFreecamWand.hasBlueprintCore(stack)` 即返回 true；保留 `active(player)` 前置守卫。
+  - 同步改名调用点：`blueprint/build/BlueprintBuildExecutor.java`（第 39 行注释、337 行判定）、`blueprint/build/BlueprintBuildScheduler.java`（274、426 行）、冒烟脚本 `scripts/LegacyActionCheck.java`（共 8 处）。已确认客户端无调用点（GUI 的施工按钮不做核心判定）。
+  - 保持不变的语义：耐久扣费仍走 `FreecamInteraction.deductUsage()`，即由**当前生效（耐久最优）法杖**支付 1 点耐久，而不是由带核心的那把；因为同文件中 `findBestWand` 本就是自由视角"当前法杖"的唯一来源，施工与挖掘共用同一扣费入口不会产生分叉。若日后要求“带核心的法杖才能付费”，需同步改造 `deductUsage` 的目标槽位选取（注意 `State.tier` 变化会连带影响 `inside()` 射程与区块票据）。
+  - 冒烟测试补强（`scripts/LegacyActionCheck.java` 的 `wandUpgradeChecks()`）：新增多法杖断言——slot0 放无核心法杖（生效）、slot5 放带核心法杖时必须判定为真；slot5 换成无核心法杖后必须为假；测试末尾还原 `wandStack` 的 slot0 核心（否则会破坏紧随其后的 `ContainerWandUpgrade` 用例）。
+  - 验证：`pwsh -File scripts/forge1710.ps1 smoke` → BUILD SUCCESSFUL（Exit 0），Ray/Drop/Collision/AE2/WandUpgrade/BlueprintCore/Storage/Network/BuildExecutor/Legacy 全项通过。
+
+- 2026-09-11 16:50：修复用户人工测试反馈的 3 个蓝图系统缺陷（Forge 1.7.10）。
+  - 缺陷 1（问题 4"未找到可以施工填充方块的按钮"）：`src/forge1710/java/local/freecaminteraction/client/gui/GuiBlueprintManager.java` 的 `buildItemButtons()` 只在**非主人**且 `permission == 2` 的分支创建 "建造施工" 按钮（id `600+i`），单人游戏里玩家自己就是任务主人，因此永远看不到施工按钮。修复：在 `task.isOwner` 分支首部也加入 `600+i` 主人施工按钮（尺寸 72×20，居中于 `centerX-60`），主人分支其余按钮（300/400/500）整体右移，不重叠；服务端 `BlueprintTaskManager.BuildTask.canBuild()` 本就对主人无条件返回 true，无需改服务端权限逻辑。
+  - 缺陷 2（问题 5"进入个人蓝图页面导致游戏暂停" + 问题 6"变更需退出页面才生效，刷新也无用"）：Forge 1.7.10 `GuiScreen.doesGuiPauseGame()` 默认返回 `true`，`GuiBlueprintManager` 与 `GuiSaveBlueprint` 均未覆写，导致单机集成服务器在界面打开期间不推进 tick。修复：两个 GUI 各新增 `@Override public boolean doesGuiPauseGame() { return false; }`（`GuiBlueprintManager.java:87`、`GuiSaveBlueprint.java:61`）。附带效果："刷新"按钮的 `PacketBlueprintListRequest` 现在能即时送达并回写列表。
+  - 缺陷 3（相邻 bug）：`src/forge1710/java/local/freecaminteraction/blueprint/network/BlueprintClientCache.java` 的 `updateTask` 仅在 `sync.permission == PERM_HIDDEN` 时移除任务，导致主人把自己任务的权限切到"仅自己"后任务从自己的列表消失、无法再改回。修复：改为 `(sync.permission == PERM_HIDDEN && !sync.isOwner)`，与 `BlueprintTaskManager.BuildTask.isVisibleTo()` 的服务端语义一致。
+  - 施工反馈补强（`src/forge1710/java/local/freecaminteraction/blueprint/build/BlueprintBuildScheduler.java`）：新增私有 `notifyRejected(EntityPlayerMP, String)`（`addChatMessage(new ChatComponentTranslation(key))`，`try/catch (Throwable)` 兼容测试桩），并在 `startBuild` 的 6 处拒绝分支（非自由视角/无蓝图核心/任务不存在/任务已结束/无建造权限/跨维度或越范围）与 `processSession`/`executeBlockUnit`/`executePartUnit` 的暂停点（越范围、区块未加载、材料不足、耐久不可扣）发出聊天反馈，避免"点了没反应"。
+  - 语言文件：`src/forge1710/resources/assets/freecam_interaction/lang/{zh_CN,en_US}.lang` 补齐 `message.freecam_interaction.bp.{need_freecam,need_core,task_unavailable,no_permission,build_out_of_range,out_of_materials,wand_exhausted,chunk_unloaded}`（`chunk_unloaded` 为本次新增）。
+  - 验证：`pwsh -File scripts/forge1710.ps1 smoke` → BUILD SUCCESSFUL（Exit 0），复用既有 `blueprintChecks`（Storage/Network/BuildExecutor）与 `LegacyActionCheck` 全项通过；`build/libs/freecam_interaction-0.1.0-forge1710-experiment.jar` 内 `zh_CN.lang` 含新键、`blueprint` 相关 class 共 65 项。未改动 1.21.1 代码。
+  - 遗留/未验证：本次修改未做游戏内人工验收；`BlueprintBuildScheduler` 无独立冒烟用例（仅有产物打包断言），施工全链路仍依赖人工测试。
+
+- 2026-09-11 16:21：完成符合 PLAN-blueprints-1710.md 规范的 Forge 1.7.10 蓝图系统施工调度、物料事务结算与完整交付（阶段 D、E）。
+  - 新增及更新类（`local.freecaminteraction.blueprint.build` 等）：
+    1. `BlueprintBuildScheduler.java`：服务端施工调度器。接入 FML 服务端 Tick，管理活跃建造会话（`ActiveBuildSession`）；按拓扑排序分步放置（Phase 0: 固体基体从 Y 轴自底向上推进；Phase 1: 附着物/红石/梯子/火把；Phase 2: AE2/GT 部件；Phase 3: 最终配置还原与连通性通知）；蓝图空气绝不破坏地形；方块已匹配自动跳过不重扣物料/耐久；遇到异种方块冲突跳过绝不破坏已有方块；完工更新状态并广播同步；
+    2. `BlueprintBuildExecutor.java`：单步建造执行与物料事务结算。包含四重资格鉴权（自由视角、有效法杖蓝图核心、合法交互范围、三档权限非 HIDDEN/VISIBLE_ONLY）；红线契约物料结算：三段式事务（预留物料 -> 实际放置 -> 提交扣除），放置失败安全回滚绝不吞物料；严格消耗协作者自身主背包（0..35），严禁动用主人库存；成功放置扣除协作者当前法杖 1 点耐久，创造法杖免耐久；法杖耐久扣至 1 时触发标准自动背包接续；并发坐标锁（`ACTIVE_COORDINATE_LOCKS`）杜绝多人并发施工相同坐标的重复放置与扣料竞态；
+    3. `FreecamInteractionMod.java`：在 Mod 预初始化阶段注册 `BlueprintBuildScheduler.INSTANCE.register()`；
+    4. 客户端交互与渲染集成：`GuiSaveBlueprint.java`（保存蓝图输入弹窗）、`GuiBlueprintManager.java`（个人蓝图与三档权限任务管理面板）、`BlueprintGhostRenderer.java`（虚影半透明渲染）、`FreecamClient.java`（状态机 A/B 键及 HUD 快捷调用）；
+  - 冒烟验证：
+    1. 在 `LegacyActionCheck.java` 中增加 `buildExecutorChecks()` 完整单元自动化断言，覆盖无核心拦截、越界拦截、三档权限拦截、协作者物料守恒与主人库存隔离、已有方块匹配跳过、并发坐标锁互斥拦截、三段式事务失败回滚以及耐久降至 1 自动背包接续；
+    2. 在 `scripts/forge1710.ps1` 中加入 `BlueprintBuildScheduler.class` 的产物打包断言；
+    3. 执行 `pwsh -File scripts/forge1710.ps1 smoke` 全项通过；产物构建完成（`freecam_interaction-0.1.0-forge1710-experiment.jar`），未修改 1.21.1 功能源码（保持待实现）。
+
+- 2026-09-11 13:13：完成符合 PLAN-blueprints-1710.md 契约的 Forge 1.7.10 法杖 4 槽升级容器与蓝图核心系统。
+  - 新增及更新类：
+    1. `ItemBlueprintCore.java`（`local.freecaminteraction.item`）：蓝图核心物品，`setMaxStackSize(1)`，注册为 `freecam_interaction:blueprint_core`，中英文本地化名称及 `addInformation` 描述说明，实现 `IWandCore` 接口（`coreId="blueprint"`）；
+    2. `IWandCore.java`（`local.freecaminteraction.item`）：法杖升级核心通用接口，定义 `getCoreId()` 保证同杖同类核心互斥；
+    3. `FreecamWandRegistry.java`：注册 `blueprintCore`，添加独立合成配方（四角纸、四边红石、中心钻石产出 1 个蓝图核心）；
+    4. `ContainerWandUpgrade.java`（`local.freecaminteraction.inventory`）：4 个升级核心槽位，防刷防丢机制：锁定编辑中的法杖槽位（禁止移走、丢弃、拿取或通过 0-8 快捷键换掉），Shift 点击核心入核心槽、背包入背包（绝不误入核心槽或锁定法杖槽），同杖防重复同类核心校验，容器关闭及槽位变动安全保存 4 槽数据至法杖 NBT，法杖移除或改变即刻失效断开；
+    5. `GuiWandUpgrade.java`（`local.freecaminteraction.client`）：客户端 GUI 界面，绑定专用像素对齐背景贴图 `wand_upgrade.png`，展示标题与槽位信息；
+    6. `FreecamGuiHandler.java`（`local.freecaminteraction`）：注册 `IGuiHandler`，服务端实例化 Container，客户端通过 `FreecamClient.getWandUpgradeGui` 实例化 GuiContainer，分端加载彻底杜绝专用服务端类加载异常；
+    7. `ItemFreecamWand.java`：潜行右键（空气与方块）打开升级 GUI，非潜行保持原切换自由视角逻辑；提供 `hasBlueprintCore(ItemStack)`、`getUpgradeCore(ItemStack, int)`、`loadUpgrades` 与 `saveUpgrades`，并在 tooltip 显示已安装核心清单与槽位数量；
+    8. `FreecamInteraction.java`：新增 `getActiveWandSlot(EntityPlayer)` 与 `hasActiveBlueprintCore(EntityPlayer)`，严格根据当前激活生效法杖槽位校验是否安装蓝图核心，作为后续蓝图与协作建造的唯一资格判定；
+    9. 材质与资产：生成 32×32 透明 RGBA `blueprint_core.png` 物品贴图与 176×166 `wand_upgrade.png` 容器贴图，记录提示词至 `art/cores/PROMPTS.md`，更新中英文 lang 文件；
+  - 冒烟验证：
+    - 在 `LegacyActionCheck.java` 中增加 `wandUpgradeChecks()` 自动化断言：核心属性、4 槽读写、激活法杖核心判定、编辑槽锁定、数字键换槽拦截、同杖重复核心拦截、Shift 双向安全转移、容器关闭 NBT 持久化；
+    - 在 `scripts/forge1710.ps1` 中加入新类及贴图资源的 JAR 产物包含断言；
+    - 执行 `pwsh -File scripts/forge1710.ps1 smoke` 全项通过；1.21.1 对应功能保持待实现。
+
+- 2026-09-11 13:03：完成符合 PLAN-blueprints-1710.md 规范的 Forge 1.7.10 蓝图系统网络通信层（BlueprintNetwork）。
+  - 新增类均位于 `src/forge1710/java/local/freecaminteraction/blueprint/network` 目录：
+    1. `BlueprintNetwork.java`：统一管理网络通信通道 `freecam_bp` 与 discriminator 分配（10..20），包含主线程 TickListener 队列调度（`runOnServer` / `runOnClient`），消除多线程竞争；
+    2. `PacketCaptureRequest.java` / `PacketCaptureAck.java`：选区蓝图采集协议，客户端只发送端点坐标与蓝图名，严禁包含任何方块或 NBT；服务端权威调用 `BlueprintCaptureHelper` 进行模式、范围、边界、区块加载和方块合法性校验，保存至个人蓝图库后返回应答；
+    3. `PacketBlueprintListRequest.java` / `PacketBlueprintListResponse.java`：蓝图列表与可见任务元数据查询协议，包含三档权限与主人身份标记，不泄漏他人私有蓝图数据；
+    4. `PacketBlueprintSlice.java` / `PacketBlueprintSliceRequest.java` / `BlueprintSliceAssembler.java`：大蓝图二进制分片传输协议，单片限制 16KB 防止 Netty 报文超限（2MB）或内存溢出；客户端会话装配器支持超时丢弃与安全重组；
+    5. `PacketTaskAction.java`：任务操作协议（创建任务、取消任务、变更三档权限、切换模式外显示）；服务端强校验主人身份防未授权伪造操作；
+    6. `PacketTaskSync.java` / `BlueprintClientCache.java`：任务状态广播同步协议；同维度可见范围内广播任务创建与变更；当权限变为 HIDDEN 时通知其他客户端清除虚影缓存；
+    7. `BlueprintWorldEventListener.java`：监听世界加载事件，绑定服务端存档根目录。
+  - 冒烟验证：
+    - 在 `LegacyActionCheck.java` 中增加 `networkChecks()` 完整数据包序列化与反序列化断言；
+    - 在 `scripts/forge1710.ps1` 中加入全部 10 个网络层核心类的 JAR 产物包含断言；
+    - 执行 `pwsh -File scripts/forge1710.ps1 smoke` 全项通过；产物构建正常；1.21.1 保持待实现。
+
+- 2026-09-11 13:03：完成符合 PLAN-blueprints-1710.md 规范的 Forge 1.7.10 蓝图存储与任务持久化层。
+  - 新增类均位于 `src/forge1710/java/local/freecaminteraction/blueprint/storage` 目录：
+    1. `TaskPermission.java`：三档权限枚举 `HIDDEN(0)`、`VISIBLE_ONLY(1)`、`BUILDABLE(2)`；
+    2. `TaskStatus.java`：任务生命周期状态 `PENDING`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED`；
+    3. `BlueprintStorage.java`：蓝图文件二进制持久化。魔数 `0x42504643 ('BPFC')`，分段二进制格式 (Header, Palette, Blocks, Parts) 与 GZIP 压缩；支持临时文件 `.bp.tmp` 原子写入替换与刷盘；坏文件损坏检测隔离为 `.corrupt_<timestamp>`，不破坏原数据；实现目录获取、保存、加载、列表与删除蓝图；
+    4. `BlueprintTask.java`：建造任务实体。持久化拥有独立的蓝图不可变快照 (`snapshot`)，删除原蓝图文件不影响已有任务；支持三档权限控制、模式外虚影可见性 (`showOutsideFreecam`)、进度统计与主人/协作者可见性及建造施工鉴权；
+    5. `BlueprintTaskManager.java`：任务管理器。持久化存储于 `freecam_interaction/tasks/<taskId>.task`，具备临时文件 `.tmp` 原子写入替换、坏任务隔离；提供 `createTask`、`cancelTask`、`updatePermission`、`setShowOutside`（严格主人鉴权防伪造操作）、`listTasksForPlayer`（基于三档权限及模式外开关过滤）、`saveTask`、`loadTask`、`loadAllTasksForWorld`。
+  - 冒烟验证：
+    - 在 `LegacyActionCheck.java` 中增加 `storageChecks()` 完整单元自动化断言，覆盖临时文件原子替换、文件损坏隔离、蓝图快照独立性、三档权限隔离与非主人操作安全拦截；
+    - 在 `scripts/forge1710.ps1` 中加入 storage 全部 5 个类的 JAR 产物包含断言；
+    - 执行 `pwsh -File scripts/forge1710.ps1 smoke` 全项通过；1.21.1 对应功能保持待实现。
+
+- 2026-09-11 12:56：完成符合 PLAN-blueprints-1710.md 契约的 Forge 1.7.10 蓝图核心数据模型与原版适配器实现。
+  - 新增核心类位于 `src/forge1710/java/local/freecaminteraction/blueprint`：
+    1. `BlueprintData.java`：蓝图数据根对象，包含唯一标识/名称、作者 UUID、尺寸/原点偏移、创建时间、方块与独立部件列表、体积与非空气方块统计、物料合并汇总 (`getConsolidatedMaterials`)、空选区与全空气校验 (`isAllAir`)；
+    2. `BlueprintBlockEntry.java`：相对原点偏移、方块与注册名引用、元数据、静态安全 NBT、适配器 ID 及所需物料列表；
+    3. `BlueprintPartEntry.java`：相对宿主偏移、6 方向附着 side、部件类型标识、专用静态 NBT 配置与物料需求（适配 AE2 部件/GT 覆盖板等）；
+    4. `MaterialRequirement.java`：物料注册名、损伤/元数据、关键匹配特征 NBT、所需与已放置数量统计、背包 `ItemStack` 鲁棒匹配判定；
+    5. `IBlueprintAdapter.java`：规范 `canHandle`、`capture`、`getRequiredMaterials`、`canPlace`、`place`、`matches` 适配器标准；
+    6. `VanillaBlueprintAdapter.java`：原版方块与容器适配器，严格拦截非法方块（基岩/传送门/命令方块等），深度消毒 TileEntity 剔除 Items/fluid/energy/进度等易复制库存，保留安全朝向与自定义配置。
+  - 冒烟验证：在 `LegacyActionCheck.java` 与 `scripts/forge1710.ps1` 中加入完整蓝图模型单元断言与 JAR 产物类核验，执行 `pwsh -File scripts/forge1710.ps1 smoke` 全项通过；1.21.1 对应功能待实现。
+
+- 2026-09-11 12:46：接手阅读并理解 HANDOFF-blueprints-1710.md 及 PLAN-blueprints-1710.md。明确任务目标为 Forge 1.7.10 蓝图系统（4槽法杖升级、蓝图核心、个人蓝图存储、多人三档权限与协作施工），1.21.1 保持待实现状态。核实需求已由用户完成确认，明确技术红线（协作者消耗自身材料耐久、数据服务端采集校验、GT/AE2部件与配置重建而不复制库存/能量、防刷GUI与事务恢复）。本轮仅完成交接阅读与任务梳理，未进入实现、未修改功能代码。
+
 - 2026-09-11 12:41：蓝图核心、4槽法杖升级、个人蓝图和协作建造完成方向/范围确认。最终任务权限为不可见／可见但不可建造／可建造（默认第二档）；协作者消耗自身材料与耐久，主人独占取消及显示/权限管理。用户要求本轮不实施，已生成 PLAN-blueprints-1710.md，并在相邻主工作树生成 HANDOFF-blueprints-1710.md；本轮仅文档，未启动执行Agent、未修改功能代码或运行构建/游戏。源码和本地GT5U5.09.31、AE2rv3-beta-6接口只读核对完成，图谱工具不可用，库存过滤及连接/虚影兼容尚待实现核验。1.21.1 待实现。
 
 - 2026-09-11 10:26：按用户最新决定彻底移除 Forge 1.7.10 的交互提示音，只保留末影粒子。删除 Mod 专属声音资源、声音事件缩放、客户端音量滑块/持久化及对应语言和 JAR 检查；成功挖除、放置、方块使用和实体互动现在仅广播 24 个 `portal` 粒子，多方块放置仍逐个实际位置出粒子，自由视角 aura 仍每 2 tick 广播 2 个粒子。此前的服务端成功判定、范围规则、实体右键以及粒子 billboard 朝向修复保持不变。`pwsh -File scripts/forge1710.ps1 smoke` 全项通过，日志 `logs/tools/2026-09-11 10-25-51.log`；最终 JAR 已核验不含声音类或 `sounds.json`。
