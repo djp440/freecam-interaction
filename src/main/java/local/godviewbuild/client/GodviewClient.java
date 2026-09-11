@@ -182,12 +182,20 @@ public final class GodviewClient {
 
     @SubscribeEvent
     public static void onInteraction(InputEvent.InteractionKeyMappingTriggered event) {
-        if (session != null && (!canBuild() || GodviewSelection.target() == null || event.isPickBlock())) {
+        boolean hasBlock = GodviewSelection.target() != null;
+        boolean hasEntity = GodviewSelection.entityTarget() != null;
+        if (session != null && (!canBuild() || !hasBlock && !hasEntity || event.isPickBlock()
+                || event.isAttack() && hasEntity)) {
             event.setCanceled(true);
             event.setSwingHand(false);
         } else if (session != null && event.isUseItem()) {
-            local.godviewbuild.ModLog.LOGGER.debug("Godview use requested; position={}; face={}; hand={}",
-                    GodviewSelection.target().getBlockPos(), GodviewSelection.target().getDirection(), event.getHand());
+            if (hasEntity) {
+                local.godviewbuild.ModLog.LOGGER.debug("Godview entity use requested; entity={}; hand={}",
+                        GodviewSelection.entityTarget().getEntity().getId(), event.getHand());
+            } else {
+                local.godviewbuild.ModLog.LOGGER.debug("Godview block use requested; position={}; face={}; hand={}",
+                        GodviewSelection.target().getBlockPos(), GodviewSelection.target().getDirection(), event.getHand());
+            }
         }
     }
 

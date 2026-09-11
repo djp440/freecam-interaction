@@ -11,8 +11,10 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
@@ -45,6 +47,18 @@ public final class GodviewInteraction {
         return GodviewRange.contains(player.getX(), player.getY(), player.getZ(),
                 position.getX(), position.getY(), position.getZ())
                 && !player.level().isOutsideBuildHeight(position)
+                && player.level().getWorldBorder().isWithinBounds(position)
+                && player.level().hasChunkAt(position);
+    }
+
+    public static boolean allowed(Player player, Entity entity) {
+        if (player == null || entity == null || entity.isRemoved() || entity.level() != player.level()) {
+            return false;
+        }
+        var center = entity.getBoundingBox().getCenter();
+        BlockPos position = entity.blockPosition();
+        return GodviewRange.contains(player.getX(), player.getY(), player.getZ(), center.x - 0.5,
+                center.y - 0.5, center.z - 0.5)
                 && player.level().getWorldBorder().isWithinBounds(position)
                 && player.level().hasChunkAt(position);
     }
@@ -83,6 +97,13 @@ public final class GodviewInteraction {
     }
 
     @SubscribeEvent
+    public static void onTick(PlayerTickEvent.Post event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            GodviewEffects.emitAura(player);
+        }
+    }
+
+    @SubscribeEvent
     public static void onLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         setActive(event.getEntity(), false);
     }
@@ -92,7 +113,7 @@ public final class GodviewInteraction {
         setActive(event.getEntity(), false);
     }
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onPlacement(BlockEvent.EntityPlaceEvent event) {
         if (event.getEntity() instanceof Player player && active(player)) {
             boolean valid = allowed(player, event.getPos());
@@ -102,6 +123,13 @@ public final class GodviewInteraction {
             if (!valid) {
                 event.setCanceled(true);
                 ModLog.LOGGER.debug("Godview placement rejected; player={}; position={}", player.getUUID(), event.getPos());
+            } else if (!event.isCanceled() && player instanceof ServerPlayer serverPlayer) {
+                if (event instanceof BlockEvent.EntityMultiPlaceEvent multiple) {
+                    multiple.getReplacedBlockSnapshots().forEach(snapshot ->
+                            GodviewEffects.recordPlacement(serverPlayer, snapshot.getPos()));
+                } else {
+                    GodviewEffects.recordPlacement(serverPlayer, event.getPos());
+                }
             }
         }
     }

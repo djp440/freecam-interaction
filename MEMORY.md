@@ -1,5 +1,11 @@
 # 项目记忆
 
+- 2026-09-11 10:26：按用户最新决定彻底移除 Minecraft 1.21.1 / NeoForge 的交互提示音，只保留末影粒子。删除 Mod 专属声音注册、声音资源、客户端音量设置/持久化、声音引擎与声音设置页 Mixin 及对应语言和 JAR 检查；服务端成功挖除、放置、方块使用和实体互动现在仅广播 24 个 `PORTAL` 粒子，多方块放置仍逐个实际位置出粒子，自由视角 aura 仍每 2 tick 广播 2 个粒子。此前的成功判定、实体选取、范围与生命周期规则保持不变。`pwsh -File scripts/dev.ps1 smoke` 全项通过，日志 `logs/tools/2026-09-11 10-25-51.log`；最终 JAR 已核验不含声音类或 `sounds.json`。
+
+- 2026-09-11 10:15：为 Minecraft 1.21.1 / NeoForge 在原版“音乐和声音选项”中增加“上帝视角建造音量”滑块（0–100%，默认 100%，0% 为关）。交互提示音改用 Mod 专属 `godview_build:interaction` 声音事件复用原版末影传送素材，客户端在 `SoundEngine.calculateVolume` 中仅缩放该事件，因此不影响原版末影人或粒子，且继续与主音量叠乘、不受其他声音分类控制；设置按客户端保存至 `config/godview_build-client.properties`，非法值回退/越界夹取，松开滑块保存并试听一次。`pwsh -File scripts/dev.ps1 smoke` 全项通过，日志 `logs/tools/2026-09-11 10-15-04.log`；尚未进行游戏内界面与双客户端听感 E2E。
+
+- 2026-09-11 09:27：完成 Minecraft 1.21.1 / NeoForge 自由视角末影指示效果：服务端每 2 tick 在玩家本体广播 2 个 `PORTAL` 粒子；成功挖除、放置、方块使用及实体右键互动在实际目标广播 24 个 `PORTAL` 粒子和一次 `ENDERMAN_TELEPORT` 音效（0.6 音量、1.0 音调），多方块放置逐块出粒子但仅响一次。客户端射线新增受前方方块遮挡的范围内实体选取，允许普通/命中部位右键互动并拒绝远程攻击；服务端通过成功返回值及实体交互内部调用统一判定，避免失败、`PASS` 与两阶段事件误报。官方 NeoForge 1.21.1 文档确认服务端广播应使用 `ServerLevel#sendParticles`；固定依赖源码用于核验具体交互返回值与 Mixin 入口。`pwsh -File scripts/dev.ps1 smoke` 通过，日志 `logs/tools/2026-09-11 09-27-38.log`；未执行需人工进入世界的双人 E2E。
+
 - 2026-09-10 16:33：相邻 Forge 1.7.10 工作树已解决 CodeChickenCore 旧版 DepLoader 因旧源失效下载损坏 JAR 导致的崩溃问题，补充 CodeChickenLib 1.1.3.138 依赖并同步；1.21.1 对应功能保持待实现。
 
 - 2026-09-10 16:30：相邻 Forge 1.7.10 工作树已为原生与 lwjgl3ify 开发客户端安装 CodeChickenCore 1.0.7.47、NotEnoughItems 1.0.5.120 与 GregTech 5.09.31 Unofficial，并更新 `scripts/tech-mods.ps1`；双冒烟测试均已通过。1.21.1 对应功能保持待实现。

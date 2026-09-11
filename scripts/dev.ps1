@@ -33,9 +33,12 @@ try {
                     'local/godviewbuild/client/GodviewClient.class', 'local/godviewbuild/client/GodviewClient$Registration.class',
                     'local/godviewbuild/client/GodviewSession.class', 'local/godviewbuild/client/GodviewMotion.class',
                     'local/godviewbuild/client/GodviewCollision.class',
-                    'local/godviewbuild/GodviewInteraction.class', 'local/godviewbuild/client/GodviewSelection.class',
+                    'local/godviewbuild/GodviewInteraction.class', 'local/godviewbuild/GodviewEffects.class',
+                    'local/godviewbuild/client/GodviewSelection.class',
                     'local/godviewbuild/mixin/PlayerMixin.class', 'local/godviewbuild/mixin/MinecraftMixin.class',
                     'local/godviewbuild/mixin/CameraMixin.class',
+                    'local/godviewbuild/mixin/EntityInteractionInvoker.class',
+                    'local/godviewbuild/mixin/ServerEntityInteractionMixin.class',
                     'godview_build.mixins.json', 'META-INF/accesstransformer.cfg', 'assets/godview_build/lang/zh_cn.json',
                     'assets/godview_build/lang/en_us.json', 'META-INF/neoforge.mods.toml')) {
                 if (!$archive.GetEntry($entry)) { throw "JAR 缺少 $entry" }

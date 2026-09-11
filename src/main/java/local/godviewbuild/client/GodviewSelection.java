@@ -14,9 +14,11 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
@@ -32,6 +34,7 @@ public final class GodviewSelection {
     private static Matrix4f inverseViewProjection;
     private static Vec3 cameraPosition;
     private static BlockHitResult selected;
+    private static EntityHitResult selectedEntity;
     private static BlockPos mining;
     private static boolean blockedUntilRelease;
     private static int viewportWidth;
@@ -41,9 +44,12 @@ public final class GodviewSelection {
 
     public static BlockHitResult target() { return selected; }
 
+    public static EntityHitResult entityTarget() { return selectedEntity; }
+
     public static void reset() {
         inverseViewProjection = null;
         selected = null;
+        selectedEntity = null;
         mining = null;
         blockedUntilRelease = true;
     }
@@ -87,7 +93,7 @@ public final class GodviewSelection {
                 client.gameMode.stopDestroyBlock();
                 mining = null;
             }
-            if (selected == null) {
+            if (selected == null && selectedEntity == null) {
                 client.options.keyAttack.setDown(false);
                 client.options.keyUse.setDown(false);
                 while (client.options.keyAttack.consumeClick()) {}
@@ -125,6 +131,7 @@ public final class GodviewSelection {
     public static void pick() {
         Minecraft client = Minecraft.getInstance();
         selected = null;
+        selectedEntity = null;
         if (GodviewClient.canBuild() && inverseViewProjection != null
                 && viewportWidth == client.getWindow().getWidth() && viewportHeight == client.getWindow().getHeight()) {
             float mouseX = (float) (client.mouseHandler.xpos() / client.getWindow().getScreenWidth() * 2 - 1);
@@ -138,14 +145,23 @@ public final class GodviewSelection {
                     && (range.contains(cameraPosition) || range.clip(cameraPosition, end).isPresent())) {
                 BlockHitResult hit = client.level.clip(new ClipContext(cameraPosition, end,
                         ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, client.player));
-                if (hit.getType() == HitResult.Type.BLOCK && GodviewInteraction.allowed(client.player, hit.getBlockPos())) {
+                double maximumDistance = hit.getType() == HitResult.Type.BLOCK
+                        ? cameraPosition.distanceToSqr(hit.getLocation()) : cameraPosition.distanceToSqr(end);
+                EntityHitResult entityHit = ProjectileUtil.getEntityHitResult(client.player, cameraPosition, end,
+                        new AABB(cameraPosition, end).inflate(1.0), entity -> entity != client.player
+                                && !entity.isSpectator() && entity.isPickable()
+                                && GodviewInteraction.allowed(client.player, entity), maximumDistance);
+                if (entityHit != null && cameraPosition.distanceToSqr(entityHit.getLocation()) < maximumDistance) {
+                    selectedEntity = entityHit;
+                } else if (hit.getType() == HitResult.Type.BLOCK
+                        && GodviewInteraction.allowed(client.player, hit.getBlockPos())) {
                     selected = hit;
                 }
             }
         }
-        client.hitResult = selected != null ? selected : BlockHitResult.miss(
+        client.hitResult = selectedEntity != null ? selectedEntity : selected != null ? selected : BlockHitResult.miss(
                 client.player == null ? Vec3.ZERO : client.player.position(), Direction.UP, BlockPos.ZERO);
-        client.crosshairPickEntity = null;
+        client.crosshairPickEntity = selectedEntity == null ? null : selectedEntity.getEntity();
     }
 
     @SubscribeEvent

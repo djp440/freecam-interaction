@@ -3,7 +3,7 @@
   "minVersion": "0.8",
   "package": "local.godviewbuild.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": ["PlayerMixin", "BlockItemMixin", "ServerGameModeMixin"],
+  "mixins": ["PlayerMixin", "BlockItemMixin", "ServerGameModeMixin", "EntityInteractionInvoker", "ServerEntityInteractionMixin"],
   "client": ["MinecraftMixin", "GameRendererMixin", "CameraMixin"],
   "injectors": { "defaultRequire": 1 }
 }

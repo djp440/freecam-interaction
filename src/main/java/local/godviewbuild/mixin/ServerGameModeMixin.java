@@ -1,5 +1,6 @@
 package local.godviewbuild.mixin;
 
+import local.godviewbuild.GodviewEffects;
 import local.godviewbuild.GodviewInteraction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -45,6 +46,31 @@ public abstract class ServerGameModeMixin {
     private void godviewCheckBreak(BlockPos position, CallbackInfoReturnable<Boolean> callback) {
         if (GodviewInteraction.active(player) && !GodviewInteraction.allowed(player, position)) {
             callback.setReturnValue(false);
+        }
+    }
+
+    @Inject(method = "destroyBlock", at = @At("RETURN"))
+    private void godviewBreakEffect(BlockPos position, CallbackInfoReturnable<Boolean> callback) {
+        if (callback.getReturnValue()) {
+            GodviewEffects.emitBreak(player, position);
+        }
+    }
+
+    @Inject(method = "useItemOn", at = @At("HEAD"))
+    private void godviewBeginUse(ServerPlayer user, net.minecraft.world.level.Level interactionLevel,
+            net.minecraft.world.item.ItemStack stack, net.minecraft.world.InteractionHand hand,
+            net.minecraft.world.phys.BlockHitResult hit, CallbackInfoReturnable<net.minecraft.world.InteractionResult> callback) {
+        if (GodviewInteraction.active(player)) {
+            GodviewEffects.beginBlockInteraction(player);
+        }
+    }
+
+    @Inject(method = "useItemOn", at = @At("RETURN"))
+    private void godviewUseEffect(ServerPlayer user, net.minecraft.world.level.Level interactionLevel,
+            net.minecraft.world.item.ItemStack stack, net.minecraft.world.InteractionHand hand,
+            net.minecraft.world.phys.BlockHitResult hit, CallbackInfoReturnable<net.minecraft.world.InteractionResult> callback) {
+        if (GodviewInteraction.active(player)) {
+            GodviewEffects.finishBlockInteraction(player, hit.getBlockPos(), callback.getReturnValue().consumesAction());
         }
     }
 
