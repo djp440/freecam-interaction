@@ -2,6 +2,7 @@ package local.freecaminteraction;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.eventhandler.EventPriority;
@@ -17,6 +18,9 @@ import local.freecaminteraction.item.ItemFreecamWand;
 import local.freecaminteraction.item.ItemFreecamWand.WandEntry;
 import local.freecaminteraction.WandTier;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.SharedMonsterAttributes;
+import net.minecraft.entity.ai.attributes.AttributeModifier;
+import net.minecraft.entity.ai.attributes.IAttributeInstance;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.inventory.Container;
@@ -35,6 +39,29 @@ public final class FreecamInteraction {
     private static final Map<EntityPlayerMP, ModeRequest> PENDING = new ConcurrentHashMap<EntityPlayerMP, ModeRequest>();
     private static final Map<EntityPlayerMP, State> ACTIVE = new HashMap<EntityPlayerMP, State>();
     private static final Map<EntityPlayerMP, RayRecord> RAYS = new ConcurrentHashMap<EntityPlayerMP, RayRecord>();
+    private static final UUID SPEED_CORE_MODIFIER_ID = UUID.fromString("6589f65e-78f1-4d06-884f-3213e70a69de");
+    private static final String SPEED_CORE_MODIFIER_NAME = "freecam_interaction.speed_core";
+
+    private static void updateSpeedModifier(EntityPlayerMP player) {
+        int cameraMultiplier = ItemFreecamWand.getInventorySpeedMultiplier(player);
+        double amount = ItemFreecamWand.getPlayerSpeedMultiplier(cameraMultiplier) - 1.0D;
+        IAttributeInstance attribute = player.getEntityAttribute(SharedMonsterAttributes.movementSpeed);
+        AttributeModifier current = attribute.getModifier(SPEED_CORE_MODIFIER_ID);
+        if (current == null && amount == 0.0D) return;
+        if (current != null && Double.compare(current.getAmount(), amount) == 0) return;
+        if (current != null) attribute.removeModifier(current);
+        if (amount > 0.0D) {
+            attribute.applyModifier(new AttributeModifier(SPEED_CORE_MODIFIER_ID, SPEED_CORE_MODIFIER_NAME, amount, 2).setSaved(false));
+        }
+        ModLog.info("Speed core changed; player=" + player.getCommandSenderName() + "; camera=" + cameraMultiplier
+                + "x; body=" + ItemFreecamWand.getPlayerSpeedMultiplier(cameraMultiplier) + "x");
+    }
+
+    private static void clearSpeedModifier(EntityPlayerMP player) {
+        IAttributeInstance attribute = player.getEntityAttribute(SharedMonsterAttributes.movementSpeed);
+        AttributeModifier current = attribute.getModifier(SPEED_CORE_MODIFIER_ID);
+        if (current != null) attribute.removeModifier(current);
+    }
 
     public static void initialize() {
         channel = NetworkRegistry.INSTANCE.newSimpleChannel("freecam1710v2");
@@ -321,6 +348,7 @@ public final class FreecamInteraction {
         EntityPlayerMP player = (EntityPlayerMP) event.player;
 
         if (event.phase == TickEvent.Phase.START) {
+            updateSpeedModifier(player);
             ModeRequest mode = PENDING.remove(player);
             if (mode != null) {
                 clientEpoch = mode.epoch;
@@ -363,9 +391,9 @@ public final class FreecamInteraction {
         }
     }
 
-    @SubscribeEvent public void logout(PlayerEvent.PlayerLoggedOutEvent event) { if (event.player instanceof EntityPlayerMP) clear((EntityPlayerMP) event.player); }
-    @SubscribeEvent public void respawn(PlayerEvent.PlayerRespawnEvent event) { if (event.player instanceof EntityPlayerMP) clear((EntityPlayerMP) event.player); }
-    @SubscribeEvent public void dimension(PlayerEvent.PlayerChangedDimensionEvent event) { if (event.player instanceof EntityPlayerMP) clear((EntityPlayerMP) event.player); }
+    @SubscribeEvent public void logout(PlayerEvent.PlayerLoggedOutEvent event) { if (event.player instanceof EntityPlayerMP) { clearSpeedModifier((EntityPlayerMP) event.player); clear((EntityPlayerMP) event.player); } }
+    @SubscribeEvent public void respawn(PlayerEvent.PlayerRespawnEvent event) { if (event.player instanceof EntityPlayerMP) { clearSpeedModifier((EntityPlayerMP) event.player); clear((EntityPlayerMP) event.player); } }
+    @SubscribeEvent public void dimension(PlayerEvent.PlayerChangedDimensionEvent event) { if (event.player instanceof EntityPlayerMP) { clearSpeedModifier((EntityPlayerMP) event.player); clear((EntityPlayerMP) event.player); } }
 
     @SubscribeEvent
     public void registration(FMLNetworkEvent.CustomPacketRegistrationEvent<?> event) {

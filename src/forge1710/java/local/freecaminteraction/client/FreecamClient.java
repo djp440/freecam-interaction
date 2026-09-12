@@ -542,7 +542,8 @@ public final class FreecamClient {
         boolean rotate = control() && Mouse.isButtonDown(2);
         if (control()) {
             MC.setIngameNotInFocus();
-            player.movementInput.sneak = down(MC.gameSettings.keyBindSneak);
+            boolean sneaking = down(MC.gameSettings.keyBindSneak);
+            player.movementInput.sneak = sneaking;
             if (rotate && dragging) {
                 float targetYaw = MathHelper.wrapAngleTo180_float(camera.rotationYaw + (x - mouseX) * 0.2F);
                 float targetPitch = MathHelper.clamp_float(camera.rotationPitch - (y - mouseY) * 0.2F, -85, 85);
@@ -555,8 +556,11 @@ public final class FreecamClient {
             double right = (down(MC.gameSettings.keyBindRight) ? 1 : 0) - (down(MC.gameSettings.keyBindLeft) ? 1 : 0);
             double up = (down(MC.gameSettings.keyBindJump) || isKeyDown(Keyboard.KEY_SPACE) ? 1 : 0)
                     - (down(MC.gameSettings.keyBindSprint) || isKeyDown(Keyboard.KEY_LCONTROL) || isKeyDown(Keyboard.KEY_RCONTROL) ? 1 : 0);
+            double speed = sneaking ? 1.0D : ItemFreecamWand.getInventorySpeedMultiplier(player);
             double[] offset = FreecamMotion.pan(camera.rotationYaw, forward, right, elapsed);
-            double yOffset = FreecamMotion.vertical(up, elapsed);
+            offset[0] *= speed;
+            offset[1] *= speed;
+            double yOffset = FreecamMotion.vertical(up, elapsed) * speed;
             double targetAnchorX = FreecamRange.clampCamera(player.posX, camera.posX + offset[0], activeTier);
             double targetAnchorY = FreecamRange.clampCameraY(camera.posY + yOffset);
             double targetAnchorZ = FreecamRange.clampCamera(player.posZ, camera.posZ + offset[1], activeTier);

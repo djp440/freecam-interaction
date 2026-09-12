@@ -119,6 +119,35 @@ public class ItemFreecamWand extends Item {
     }
 
     /**
+     * 读取单把法杖的移速核心倍率。非法重复 NBT 取最高档，不叠加。
+     */
+    public static int getSpeedMultiplier(ItemStack stack) {
+        int multiplier = 1;
+        if (stack == null || !(stack.getItem() instanceof ItemFreecamWand)) return multiplier;
+        for (ItemStack core : loadUpgrades(stack)) {
+            if (core != null && core.getItem() instanceof ItemSpeedCore) {
+                multiplier = Math.max(multiplier, ((ItemSpeedCore) core.getItem()).cameraMultiplier);
+            }
+        }
+        return multiplier;
+    }
+
+    /** 主背包 0..35 中所有法杖取最高移速档；不检查耐久。 */
+    public static int getInventorySpeedMultiplier(EntityPlayer player) {
+        int multiplier = 1;
+        if (player == null || player.inventory == null || player.inventory.mainInventory == null) return multiplier;
+        int limit = Math.min(36, player.inventory.mainInventory.length);
+        for (int i = 0; i < limit; i++) {
+            multiplier = Math.max(multiplier, getSpeedMultiplier(player.inventory.mainInventory[i]));
+        }
+        return multiplier;
+    }
+
+    public static double getPlayerSpeedMultiplier(int cameraMultiplier) {
+        return cameraMultiplier >= 4 ? 1.5D : cameraMultiplier >= 2 ? 1.25D : 1.0D;
+    }
+
+    /**
      * 获取法杖指定升级槽位（0..3）中的核心物品。
      */
     public static ItemStack getUpgradeCore(ItemStack stack, int slot) {

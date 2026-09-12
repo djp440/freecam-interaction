@@ -92,6 +92,7 @@ try {
                     'local/freecaminteraction/blueprint/build/BlueprintBuildExecutor.class',
                     'local/freecaminteraction/blueprint/build/BlueprintBuildScheduler.class',
                     'local/freecaminteraction/item/ItemBlueprintCore.class',
+                    'local/freecaminteraction/item/ItemSpeedCore.class',
                     'local/freecaminteraction/item/IWandCore.class',
                     'local/freecaminteraction/inventory/ContainerWandUpgrade.class',
                     'local/freecaminteraction/client/GuiWandUpgrade.class',
@@ -100,6 +101,8 @@ try {
                     'local/freecaminteraction/client/renderer/BlueprintGhostRenderer.class',
                     'local/freecaminteraction/FreecamGuiHandler.class',
                     'assets/freecam_interaction/textures/items/blueprint_core.png',
+                    'assets/freecam_interaction/textures/items/speed_core_2x.png',
+                    'assets/freecam_interaction/textures/items/speed_core_4x.png',
                     'assets/freecam_interaction/textures/gui/wand_upgrade.png',
                     'assets/freecam_interaction/lang/zh_CN.lang')) {
                 if (!$zip.GetEntry($name)) { throw "产物缺少 $name" }

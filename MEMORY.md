@@ -1,5 +1,30 @@
 # 项目记忆
 
+- 2026-09-12 11:55：用户确认 Forge 1.7.10 两倍/四倍移速核心人工验收通过；准备将实现、测试、计划交接文档及配套美术资源一并提交 Git，保留既有未跟踪 `.diagnose-tmp/` 不提交。
+
+- 2026-09-11 23:26：完成 Forge 1.7.10 两倍/四倍移速核心实现并通过冒烟验证。
+  - 新增 `ItemSpeedCore`，注册 `speed_core_2x` / `speed_core_4x`、时钟无序合成两倍核心和“两枚两倍核心 + 石英块”无序合成四倍核心；两档共享 `coreId=speed`，沿用四槽容器的同类互斥规则，同时允许与蓝图核心共存。
+  - `ItemFreecamWand.getInventorySpeedMultiplier` 扫描主背包 0..35 内所有法杖并只取最高档，不检查耐久，因此剩余耐久 1 的法杖仍提供被动效果；非法重复 NBT 同样只取最高档、不叠加。
+  - 服务端每 tick 依据最高档维护固定 UUID、`operation=2`、`setSaved(false)` 的 `movementSpeed` modifier，使本体总移速独立乘 1.25/1.5；登出、重生和跨维度时主动移除。客户端只缩放 `FreecamMotion` 已夹限后的水平/升降位移至 2/4 倍，潜行键按当前改键状态临时恢复 1 倍。
+  - 补齐中英文名称/说明、JAR 必备类和材质清单，并在 `LegacyActionCheck` 覆盖不可堆叠、同类互斥/蓝图共存、倍率数学、耐久 1、生效法杖最高档及非法 NBT 不叠加。
+  - 验证：`pwsh -NoProfile -File scripts/forge1710.ps1 check` 通过；`pwsh -NoProfile -File scripts/forge1710.ps1 smoke` BUILD SUCCESSFUL（16 actionable tasks，ActionCheck、无 GT 反射检查与 Java 8 smoke 全部通过）；JAR 已确认包含 `ItemSpeedCore.class`、两张 PNG 和 `zh_CN/en_US` 语言文件；`git diff --check` 无错误，仅 CRLF 提示。
+
+- 2026-09-11 22:48：完成两倍/四倍移速核心材质贴图生成与透明度校准，未编写/修改任何逻辑代码。
+  - 用户明确要求：“你只生成所需材质贴图并汇报贴图文件路径，不编写代码”。
+  - 产物文件：
+    - `src/forge1710/resources/assets/freecam_interaction/textures/items/speed_core_2x.png`（32×32 RGBA PNG，铜质齿轮边框+金黄时钟表盘+翡翠绿刻度与指针，透明像素 480，可见像素 544）。
+    - `src/forge1710/resources/assets/freecam_interaction/textures/items/speed_core_4x.png`（32×32 RGBA PNG，平滑石英边框+深邃暗紫星空+亮白星芒核心，透明像素 484，可见像素 540）。
+    - `art/cores/preview.png`（384×128 4倍放大并排预览，包含蓝图核心、两倍核心、四倍核心）。
+    - `art/cores/speed_core_2x_source.jpg` 与 `art/cores/speed_core_4x_source.jpg`（原始高分辨率生成图备份）。
+    - `art/cores/PROMPTS.md`（补充生成提示词与视觉设计记录）。
+  - 严格保持 0 行功能/测试代码改动，未安装新依赖，未修改系统 Java 环境，未自动提交。
+
+- 2026-09-11 22:28：两倍/四倍移速核心完成两次确认，按用户要求仅规划并交接，不实施。
+  - 已确认需求与验收基线见 `PLAN-speed-cores-1710.md`；接手说明见 `HANDOFF-speed-cores-1710.md`，按全局 handoff 技能生成，不重复计划正文。
+  - 只做 Forge 1.7.10；主背包最高档携带生效（包含剩余耐久 1 的法杖），本体独立乘 1.25/1.5，相机平移升降乘 2/4，潜行改键跟随且仅临时取消相机加速，同杖同类互斥，无专属药水图标。配方等完整契约以计划为准。
+  - 只读核实：findBestWand 排除耗尽法杖，不适合移速档位；FreecamMotion 将 elapsed 夹到 0.05，实施应缩放输出位移而不是 elapsed。原生属性乘算、同步、持久化尚需下一 Agent 核验。
+  - 本轮未修改功能源码、生成材质、启动执行 Agent、构建或运行游戏；仅做文档核对，不声明功能测试通过。开始时已有未跟踪 `.diagnose-tmp/`，保留不动。
+
 - 2026-09-11 21:47：调整自由视角光标跟随物品渲染偏移。
   - 将手持物品在光标右下方的渲染偏移由 `(+10, +10)` 缩小至 `(+4, +4)`，使物品图标更加紧凑地贴近鼠标光标尖端，同时保持不阻挡热点判定。
   - 验证：执行 `pwsh -File scripts/forge1710.ps1 smoke`，编译与自动化检查全部通过。

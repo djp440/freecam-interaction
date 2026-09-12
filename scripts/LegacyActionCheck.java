@@ -605,6 +605,24 @@ public class LegacyActionCheck {
         assert "blueprint".equals(coreItem.getCoreId()) : "Core ID must be 'blueprint'";
         net.minecraft.item.ItemStack coreStack = new net.minecraft.item.ItemStack(coreItem, 1, 0);
 
+        local.freecaminteraction.item.ItemSpeedCore speed2Item = new local.freecaminteraction.item.ItemSpeedCore(2, 1.25D);
+        local.freecaminteraction.item.ItemSpeedCore speed4Item = new local.freecaminteraction.item.ItemSpeedCore(4, 1.5D);
+        registerItemForCheck(speed2Item, 4010);
+        registerItemForCheck(speed4Item, 4011);
+        assert speed2Item.getItemStackLimit() == 1 && speed4Item.getItemStackLimit() == 1;
+        assert "speed".equals(speed2Item.getCoreId()) && speed2Item.getCoreId().equals(speed4Item.getCoreId());
+        assert local.freecaminteraction.inventory.ContainerWandUpgrade.isSameCore(
+                new net.minecraft.item.ItemStack(speed2Item), new net.minecraft.item.ItemStack(speed4Item))
+                : "Speed core tiers must be mutually exclusive";
+        assert !local.freecaminteraction.inventory.ContainerWandUpgrade.isSameCore(
+                coreStack, new net.minecraft.item.ItemStack(speed2Item))
+                : "Blueprint and speed cores must coexist";
+        assert local.freecaminteraction.item.ItemFreecamWand.getPlayerSpeedMultiplier(1) == 1.0D;
+        assert local.freecaminteraction.item.ItemFreecamWand.getPlayerSpeedMultiplier(2) == 1.25D;
+        assert local.freecaminteraction.item.ItemFreecamWand.getPlayerSpeedMultiplier(4) == 1.5D;
+        assert Math.abs(1.2D * local.freecaminteraction.item.ItemFreecamWand.getPlayerSpeedMultiplier(2) - 1.5D) < 1.0E-9D;
+        assert Math.abs(1.2D * local.freecaminteraction.item.ItemFreecamWand.getPlayerSpeedMultiplier(4) - 1.8D) < 1.0E-9D;
+
         local.freecaminteraction.item.ItemFreecamWand wandItem = new local.freecaminteraction.item.ItemFreecamWand(local.freecaminteraction.WandTier.NORMAL);
         registerItemForCheck(wandItem, 4001);
         net.minecraft.item.ItemStack wandStack = new net.minecraft.item.ItemStack(wandItem, 1, 0);
@@ -620,6 +638,13 @@ public class LegacyActionCheck {
         net.minecraft.item.ItemStack[] allCores = local.freecaminteraction.item.ItemFreecamWand.loadUpgrades(wandStack);
         assert allCores.length == 4;
         assert allCores[0] == null && allCores[1] == null && allCores[2] != null && allCores[3] == null;
+
+        // 非法重复 NBT 也只取最高档，不叠加。
+        local.freecaminteraction.item.ItemFreecamWand.setUpgradeCore(wandStack, 0, new net.minecraft.item.ItemStack(speed2Item));
+        local.freecaminteraction.item.ItemFreecamWand.setUpgradeCore(wandStack, 1, new net.minecraft.item.ItemStack(speed4Item));
+        assert local.freecaminteraction.item.ItemFreecamWand.getSpeedMultiplier(wandStack) == 4;
+        local.freecaminteraction.item.ItemFreecamWand.setUpgradeCore(wandStack, 0, null);
+        local.freecaminteraction.item.ItemFreecamWand.setUpgradeCore(wandStack, 1, null);
 
         // 清除核心
         local.freecaminteraction.item.ItemFreecamWand.setUpgradeCore(wandStack, 2, null);
@@ -638,6 +663,20 @@ public class LegacyActionCheck {
         player.inventory = new net.minecraft.entity.player.InventoryPlayer(player);
         player.inventoryContainer = new DummyContainer();
         player.inventory.mainInventory[0] = wandStack;
+
+        net.minecraft.item.ItemStack speedWand2 = new net.minecraft.item.ItemStack(wandItem, 1, wandItem.getMaxDamage() - 1);
+        net.minecraft.item.ItemStack speedWand4 = new net.minecraft.item.ItemStack(wandItem, 1, 0);
+        local.freecaminteraction.item.ItemFreecamWand.setUpgradeCore(speedWand2, 0, new net.minecraft.item.ItemStack(speed2Item));
+        local.freecaminteraction.item.ItemFreecamWand.setUpgradeCore(speedWand4, 0, new net.minecraft.item.ItemStack(speed4Item));
+        player.inventory.mainInventory[2] = speedWand2;
+        assert local.freecaminteraction.item.ItemFreecamWand.getInventorySpeedMultiplier(player) == 2
+                : "A wand at one durability must still provide passive speed";
+        player.inventory.mainInventory[8] = speedWand4;
+        assert local.freecaminteraction.item.ItemFreecamWand.getInventorySpeedMultiplier(player) == 4
+                : "Multiple wands must use the highest speed tier without stacking";
+        player.inventory.mainInventory[8] = null;
+        player.inventory.mainInventory[2] = null;
+        assert local.freecaminteraction.item.ItemFreecamWand.getInventorySpeedMultiplier(player) == 1;
 
         // 非自由视角下必然为 false
         assert !local.freecaminteraction.FreecamInteraction.hasBlueprintCoreWand(player) : "Must return false when freecam is inactive";
@@ -719,6 +758,13 @@ public class LegacyActionCheck {
         // coreSlot0 此时已安装 blueprintCore (由 wandStack 构造时读取)
         assert coreSlot0.getHasStack() && coreSlot0.getStack().getItem() == coreItem;
         assert !coreSlot1.isItemValid(coreStack) : "Duplicate blueprint core must be rejected";
+        assert coreSlot1.isItemValid(new net.minecraft.item.ItemStack(speed2Item)) : "Blueprint and speed cores must coexist";
+        coreSlot1.putStack(new net.minecraft.item.ItemStack(speed2Item));
+        coreSlot1.onSlotChanged();
+        assert !((net.minecraft.inventory.Slot) container.inventorySlots.get(2)).isItemValid(new net.minecraft.item.ItemStack(speed4Item))
+                : "Different speed tiers must not coexist on one wand";
+        coreSlot1.putStack(null);
+        coreSlot1.onSlotChanged();
 
         // 取出 slot0 的核心后，slot1 与 slot0 应该能接受
         coreSlot0.putStack(null);
