@@ -91,8 +91,14 @@ try {
                     'local/freecaminteraction/blueprint/network/BlueprintStorageManager.class',
                     'local/freecaminteraction/blueprint/build/BlueprintBuildExecutor.class',
                     'local/freecaminteraction/blueprint/build/BlueprintBuildScheduler.class',
+                    'local/freecaminteraction/ae2/Ae2Integration.class',
+                    'local/freecaminteraction/ae2/BlockAe2Transmitter.class',
+                    'local/freecaminteraction/ae2/rv3/Ae2Runtime.class',
+                    'local/freecaminteraction/ae2/rv3/TileAe2Transmitter.class',
+                    'local/freecaminteraction/ae2/rv3/RemoteTerminals.class',
                     'local/freecaminteraction/item/ItemBlueprintCore.class',
                     'local/freecaminteraction/item/ItemSpeedCore.class',
+                    'local/freecaminteraction/item/ItemAe2TransferCore.class',
                     'local/freecaminteraction/item/IWandCore.class',
                     'local/freecaminteraction/inventory/ContainerWandUpgrade.class',
                     'local/freecaminteraction/client/GuiWandUpgrade.class',
@@ -103,6 +109,9 @@ try {
                     'assets/freecam_interaction/textures/items/blueprint_core.png',
                     'assets/freecam_interaction/textures/items/speed_core_2x.png',
                     'assets/freecam_interaction/textures/items/speed_core_4x.png',
+                    'assets/freecam_interaction/textures/items/ae2_transfer_core.png',
+                    'assets/freecam_interaction/textures/blocks/ae2_transmitter_off.png',
+                    'assets/freecam_interaction/textures/blocks/ae2_transmitter_on.png',
                     'assets/freecam_interaction/textures/gui/wand_upgrade.png',
                     'assets/freecam_interaction/lang/zh_CN.lang')) {
                 if (!$zip.GetEntry($name)) { throw "产物缺少 $name" }
@@ -111,6 +120,26 @@ try {
             try { $metadata = $reader.ReadToEnd() } finally { $reader.Dispose() }
             if ($metadata.Contains('${') -or !$metadata.Contains('1.7.10') -or !$metadata.Contains('自由视角交互')) { throw '元数据错误' }
             if ($zip.GetEntry('META-INF/neoforge.mods.toml')) { throw '错误地包含 NeoForge 资源' }
+            $remoteTerminals = Get-Content -LiteralPath 'src/forge1710/java/local/freecaminteraction/ae2/rv3/RemoteTerminals.java' -Raw -Encoding UTF8
+            $clientStart = $remoteTerminals.IndexOf('static Object clientGui(int id, EntityPlayer player)')
+            $clientEnd = $remoteTerminals.IndexOf('private static Session clientSession', $clientStart)
+            $clientGui = if ($clientStart -ge 0 -and $clientEnd -gt $clientStart) { $remoteTerminals.Substring($clientStart, $clientEnd - $clientStart) } else { '' }
+            if (!$clientGui -or $clientGui.Contains('selectedTile')) { throw 'AE2 客户端 GUI 不得读取远端 TileEntity' }
+            if (!$remoteTerminals.Contains('public static final class Lifecycle')) { throw 'Forge 事件监听器必须公开，避免 ASMEventHandler 跨类加载器访问失败' }
+            if (!$remoteTerminals.Contains('CONSTRUCTING.set(tile)') -or !$remoteTerminals.Contains('return tile == null ? CONSTRUCTING.get() : tile;')) { throw 'AE2 虚拟终端必须在父类构造期提供传输器宿主' }
+            $remoteGuis = Get-Content -LiteralPath 'src/forge1710/java/local/freecaminteraction/ae2/rv3/RemoteGuis.java' -Raw -Encoding UTF8
+            if (!$remoteGuis.Contains('x, guiTop + 4 + page * 20, 18, 18') -or $remoteGuis.Contains('x + page * 42')) { throw 'AE2 跨页导航必须使用容器侧边的方形纵向布局' }
+            $ae2Integration = Get-Content -LiteralPath 'src/forge1710/java/local/freecaminteraction/ae2/Ae2Integration.java' -Raw -Encoding UTF8
+            if (!$ae2Integration.Contains('return !world.isRemote;')) { throw 'AE2 绑定入口必须允许客户端发送原版 C08 交互包' }
+            $freecamClient = Get-Content -LiteralPath 'src/forge1710/java/local/freecaminteraction/client/FreecamClient.java' -Raw -Encoding UTF8
+            $keyboardStart = $freecamClient.IndexOf('public void keyboard(InputEvent.KeyInputEvent event)')
+            $keyboardEnd = $freecamClient.IndexOf('@SubscribeEvent', $keyboardStart + 1)
+            $keyboard = if ($keyboardStart -ge 0 -and $keyboardEnd -gt $keyboardStart) { $freecamClient.Substring($keyboardStart, $keyboardEnd - $keyboardStart) } else { '' }
+            $pressedCheck = $keyboard.IndexOf('keyBindInventory.isPressed()')
+            $defaultRequest = $keyboard.IndexOf('requestTerminal(6)')
+            if (!$keyboard -or $pressedCheck -lt 0 -or $defaultRequest -lt 0 -or $pressedCheck -gt $defaultRequest -or $keyboard.Contains('hasBoundCoreWand')) { throw '自由视角背包键必须由服务端权威选择 AE2 终端或原版背包' }
+            $ae2Runtime = Get-Content -LiteralPath 'src/forge1710/java/local/freecaminteraction/ae2/rv3/Ae2Runtime.java' -Raw -Encoding UTF8
+            if (!$ae2Runtime.Contains('page = candidates(player).isEmpty() ? 4 : 1;')) { throw 'AE2 默认终端请求必须在服务端按实时绑定状态回退原版背包' }
             Write-Host "Forge 1.7.10 产物冒烟通过：$jar"
         } finally { $zip.Dispose() }
     }

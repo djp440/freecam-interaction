@@ -16,6 +16,10 @@ sourceSets.main {
     java.setSrcDirs(['src/forge1710/java'])
     resources.setSrcDirs(['src/forge1710/resources'])
 }
+dependencies {
+    // 只用于固定 rv3-beta-6 API 编译；不嵌入 Mod 产物。
+    compileOnly files('run/mods/appliedenergistics2-rv3-beta-6.jar')
+}
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
 tasks.named('processResources') {
     filteringCharset = 'UTF-8'
@@ -30,7 +34,7 @@ tasks.register('prepareNativeCache', Copy) {
     from layout.projectDirectory.dir('run/natives/lwjgl2')
     into nativeCache
 }
-def actionCheckMods = fileTree('run/mods') { include 'gregtech-*.jar' }
+def actionCheckMods = fileTree('run/mods') { include 'gregtech-*.jar'; include 'appliedenergistics2-rv3-beta-6.jar' }
 def compileActionCheck = tasks.register('compileActionCheck', JavaCompile) {
     dependsOn tasks.named('classes')
     source = files('scripts/LegacyActionCheck.java')

@@ -91,6 +91,9 @@ public class ItemFreecamWand extends Item {
     @Override
     public boolean onItemUseFirst(ItemStack stack, EntityPlayer player, World world, int x, int y, int z, int side, float hitX, float hitY, float hitZ) {
         if (player.isSneaking()) {
+            if (local.freecaminteraction.ae2.Ae2Integration.tryBind(player, stack, world, x, y, z)) {
+                return true;
+            }
             if (!world.isRemote) {
                 player.openGui(local.freecaminteraction.FreecamInteractionMod.instance,
                         local.freecaminteraction.FreecamWandRegistry.GUI_WAND_UPGRADE,
@@ -251,6 +254,12 @@ public class ItemFreecamWand extends Item {
             if (cores[i] != null) {
                 tooltip.add("  \u00A77- " + cores[i].getDisplayName());
             }
+        }
+        if (local.freecaminteraction.ae2.Ae2Integration.hasCore(stack) && stack.hasTagCompound()
+                && stack.getTagCompound().hasKey("Ae2Transfer", 10)) {
+            net.minecraft.nbt.NBTTagCompound binding = stack.getTagCompound().getCompoundTag("Ae2Transfer");
+            tooltip.add("  \u00A7b" + StatCollector.translateToLocal("tooltip.freecam_interaction.ae2_bound") + ": \u00A7f"
+                    + binding.getInteger("Dim") + " @ " + binding.getInteger("X") + ", " + binding.getInteger("Y") + ", " + binding.getInteger("Z"));
         }
     }
 

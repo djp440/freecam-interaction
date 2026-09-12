@@ -18,6 +18,7 @@ public final class FreecamInteractionMod {
         ModLog.info("Forge 1.7.10 experiment; side=" + event.getSide()
                 + "; java=" + System.getProperty("java.version"));
         FreecamWandRegistry.initialize();
+        local.freecaminteraction.ae2.Ae2Integration.initialize(this);
         FreecamChunkLoader.initialize(this);
         FreecamInteraction.initialize();
         cpw.mods.fml.common.network.NetworkRegistry.INSTANCE.registerGuiHandler(this, new FreecamGuiHandler());

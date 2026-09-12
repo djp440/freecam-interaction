@@ -308,6 +308,12 @@ public final class FreecamClient {
     public void keyboard(InputEvent.KeyInputEvent event) {
         if (MC.currentScreen != null) return;
 
+        if (current() && MC.gameSettings.keyBindInventory.isPressed() && !Keyboard.isRepeatEvent()) {
+            // 绑定信息以服务端背包为准；服务端会在未绑定时退回原版背包。
+            local.freecaminteraction.ae2.Ae2Integration.requestTerminal(6);
+            return;
+        }
+
         if (TOGGLE.isPressed() && !Keyboard.isRepeatEvent() && MC.thePlayer != null
                 && MC.thePlayer.isEntityAlive() && !MC.thePlayer.isPlayerSleeping()) {
             if (camera != null) exit("toggle");

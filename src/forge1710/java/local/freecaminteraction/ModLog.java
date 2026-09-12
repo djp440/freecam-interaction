@@ -44,4 +44,9 @@ public final class ModLog {
         LOGGER.info(message);
         if (file != null) file.flush();
     }
+
+    public static synchronized void error(String message, Throwable error) {
+        LOGGER.log(Level.SEVERE, message, error);
+        if (file != null) file.flush();
+    }
 }

@@ -7,6 +7,8 @@ import local.freecaminteraction.WandTier;
 import net.minecraft.init.Blocks;
 import net.minecraft.init.Items;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.Item;
+import net.minecraft.block.Block;
 
 public final class FreecamWandRegistry {
     public static ItemFreecamWand wandNormal;
@@ -15,6 +17,8 @@ public final class FreecamWandRegistry {
     public static local.freecaminteraction.item.ItemBlueprintCore blueprintCore;
     public static ItemSpeedCore speedCore2x;
     public static ItemSpeedCore speedCore4x;
+    public static Item ae2TransferCore;
+    public static Block ae2Transmitter;
     public static final int GUI_WAND_UPGRADE = FreecamGuiHandler.GUI_WAND_UPGRADE;
 
     private FreecamWandRegistry() {}

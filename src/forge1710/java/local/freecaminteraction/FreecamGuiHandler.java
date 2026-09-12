@@ -11,11 +11,20 @@ import net.minecraft.world.World;
  */
 public class FreecamGuiHandler implements IGuiHandler {
     public static final int GUI_WAND_UPGRADE = 1;
+    public static final int GUI_AE2_ITEM = 20;
+    public static final int GUI_AE2_CRAFTING = 21;
+    public static final int GUI_AE2_PATTERN = 22;
+    public static final int GUI_AE2_INTERFACE = 23;
+    public static final int GUI_AE2_INVENTORY = 24;
+    public static final int GUI_AE2_TARGET = 25;
 
     @Override
     public Object getServerGuiElement(int ID, EntityPlayer player, World world, int x, int y, int z) {
         if (ID == GUI_WAND_UPGRADE) {
             return new ContainerWandUpgrade(player.inventory, x);
+        }
+        if (ID >= GUI_AE2_ITEM && ID <= GUI_AE2_TARGET) {
+            return local.freecaminteraction.ae2.Ae2Integration.serverGui(ID, player);
         }
         return null;
     }
@@ -24,6 +33,9 @@ public class FreecamGuiHandler implements IGuiHandler {
     public Object getClientGuiElement(int ID, EntityPlayer player, World world, int x, int y, int z) {
         if (ID == GUI_WAND_UPGRADE) {
             return local.freecaminteraction.client.FreecamClient.getWandUpgradeGui(player, x);
+        }
+        if (ID >= GUI_AE2_ITEM && ID <= GUI_AE2_TARGET) {
+            return local.freecaminteraction.ae2.Ae2Integration.clientGui(ID, player);
         }
         return null;
     }

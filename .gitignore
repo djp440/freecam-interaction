@@ -1,5 +1,7 @@
 .gradle/
 build/
+!src/forge1710/java/local/freecaminteraction/blueprint/build/
+!src/forge1710/java/local/freecaminteraction/blueprint/build/**
 run/
 run-lwjgl3ify/
 logs/

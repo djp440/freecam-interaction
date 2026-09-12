@@ -199,6 +199,19 @@ public final class FreecamInteraction {
     }
 
     /** 服务端唯一扣费入口：复核法杖 -> 扣除 1 耐久（钳制至少剩 1） -> 发生 2->1 则立即接续下一把 */
+    public static boolean canDeductUsage(EntityPlayerMP player) {
+        State state = ACTIVE.get(player);
+        if (state == null || !active(player)) return false;
+        if (state.tier == WandTier.CREATIVE) return true;
+        if (state.selectedSlot >= 0 && state.selectedSlot < 36) {
+            ItemStack stack = player.inventory.mainInventory[state.selectedSlot];
+            if (stack != null && stack.getItem() instanceof ItemFreecamWand
+                    && ((ItemFreecamWand) stack.getItem()).tier == state.tier
+                    && stack.getMaxDamage() - stack.getItemDamage() > 1) return true;
+        }
+        return ItemFreecamWand.findBestWand(player) != null;
+    }
+
     public static boolean deductUsage(EntityPlayerMP player) {
         State state = ACTIVE.get(player);
         if (state == null || !active(player)) return false;
