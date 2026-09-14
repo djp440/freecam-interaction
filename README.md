@@ -64,6 +64,8 @@ pwsh -File scripts/dev.ps1 server
 
 本项目以 [MIT License](LICENSE) 开源。
 
+验收记录与历史交接文档见 [docs/README.md](docs/README.md)。
+
 ## 来源
 
 以官方 `NeoForgeMDKs/MDK-1.21.1-ModDevGradle` 提交 `70d335c962ee8a773b38fb0690c7e7f30d1bafa6` 的构建配置和 Wrapper 为基础。未加入示例物品、发布插件、自动 JDK 解析、Parchment 或跨版本框架。

@@ -6,7 +6,7 @@
 
 用户已完成 intent-completion 方向及范围确认，并最终加入三档他人权限及协作施工。最后指令是“确认。但不进入实施，生成实施方案并 handoff 交接给其他agent进行实施”。本会话仅写文档，未启动功能实现。接手实施无需重新进行两道确认。
 
-完整需求、工程建议、源码证据、实施顺序、边界与验收见：[PLAN-blueprints-1710.md](../上帝视角建造-forge1710/PLAN-blueprints-1710.md)。不要以更早聊天中“仅主人可建造/协作暂不纳入”的建议覆盖该文件最终契约。
+完整需求、工程建议、源码证据、实施顺序、边界与验收见：[PLAN-blueprints-1710.md](https://github.com/djp440/freecam-interaction/blob/main/docs/PLAN-blueprints-1710.md)。不要以更早聊天中“仅主人可建造/协作暂不纳入”的建议覆盖该文件最终契约。
 
 ## 接手入口
 

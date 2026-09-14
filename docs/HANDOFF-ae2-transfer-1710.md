@@ -6,11 +6,11 @@
 
 用户已经确认 intent-completion 的方向及完整范围，最后明确要求：“确认。先不实施，产出实施计划并 handoff 交接给下个agent实施”。本轮仅制作交接，不创建或唤醒执行 Agent。
 
-下一会话受领任务后实施 [PLAN-ae2-transfer-1710.md](../上帝视角建造-forge1710/PLAN-ae2-transfer-1710.md)。它是需求、玩法选择、工程依据、步骤和验收的唯一基线；本文不重复其清单。不必重新走已完成的两道确认；如接手时用户仍只要求阅读交接，先遵守该当轮指令。
+下一会话受领任务后实施 [PLAN-ae2-transfer-1710.md](https://github.com/djp440/freecam-interaction/blob/main/docs/PLAN-ae2-transfer-1710.md)。它是需求、玩法选择、工程依据、步骤和验收的唯一基线；本文不重复其清单。不必重新走已完成的两道确认；如接手时用户仍只要求阅读交接，先遵守该当轮指令。
 
 ## 项目入口与当前状态
 
-- 实施目录：当前工作区的相邻 `../上帝视角建造-forge1710`；分支 `codex/forge-1.7.10`。先阅读目标树的 [AGENTS.md](../上帝视角建造-forge1710/AGENTS.md)、[MEMORY.md](../上帝视角建造-forge1710/MEMORY.md)，再读计划。
+- 实施目录：当前工作区的相邻 `../上帝视角建造-forge1710`；分支 `main`。先阅读目标树的 [AGENTS.md](https://github.com/djp440/freecam-interaction/blob/main/AGENTS.md)、[MEMORY.md](https://github.com/djp440/freecam-interaction/blob/main/MEMORY.md)，再读计划。
 - 当前目录为 1.21.1 入口树；本次不在这里实现功能。目标版本和两树基线提交见计划第1、3节。
 - 本轮只做只读源码/官方资料核对，编写计划、交接和两树记忆。没有功能、配方、材质、模型或测试代码改动，没有下载/安装依赖、构建、运行游戏、Git提交或实机验收。
 - 本轮开始时，入口树已有 AGENTS.md、MEMORY.md 未提交修改；目标树已有未跟踪 `.diagnose-tmp/`。这些不是本轮创建的，保留不动。
