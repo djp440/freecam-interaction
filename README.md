@@ -36,11 +36,20 @@ pwsh -File scripts/lwjgl3ify.ps1 client
 - 服务端仍使用原版 C07/C08、`ItemInWorldManager`、Forge 交互/破坏/放置事件与权限检查；模式退出、死亡、换维度和断线时恢复原 reach 并清理挖掘状态。
 - 原版箱子、熔炉、漏斗、酿造台、信标、末影箱、发射器、附魔台、铁砧和工作台的距离检查支持 16 格范围；第三方容器留到 lwjgl3ify/GTNH 兼容阶段逐项验证。
 - lwjgl3ify 3.0.33 已在独立实例跑通主菜单、世界、自由视角和 Iron Chests 6.1.13 第三方容器；RFB/UniMixins 与本 Mod 核心转换器同时加载。
-- 实验结果记录在 `ACCEPTANCE-1710.md`。
+- 实验结果记录在 [docs/ACCEPTANCE-1710.md](docs/ACCEPTANCE-1710.md)。
 
 上游工具来源：[RetroFuturaGradle](https://github.com/GTNewHorizons/RetroFuturaGradle)、[lwjgl3ify](https://github.com/GTNewHorizons/lwjgl3ify)。
 
-SoundManager 的异步重入窗口已在核心补丁中串行化；原生 LWJGL2 已连续启动并完成创造/生存世界交互验收，详见 `ACCEPTANCE-1710.md`。
+SoundManager 的异步重入窗口已在核心补丁中串行化；原生 LWJGL2 已连续启动并完成创造/生存世界交互验收，详见 [docs/ACCEPTANCE-1710.md](docs/ACCEPTANCE-1710.md)。
+
+更多验收记录、实施计划与历史交接文档见 [docs/README.md](docs/README.md)。
+
+## 贡献者
+
+- [djp440](https://github.com/djp440) — 项目作者与维护者。
+- [OpenAI Codex](https://developers.openai.com/codex) — 参与需求梳理、功能实现、问题诊断、自动化验证与开源发布。
+
+完整说明见 [CONTRIBUTORS.md](CONTRIBUTORS.md)。
 
 ## 许可证
 

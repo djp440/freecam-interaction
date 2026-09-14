@@ -1,5 +1,7 @@
 # 项目记忆
 
+- 2026-09-14 13:05：开源仓库文档布局整理为单一 `docs/` 目录：`ACCEPTANCE*.md`、`PLAN-*.md` 与 `HANDOFF-*.md` 移入该目录，新增 `docs/README.md` 索引并修复相对链接。根目录保留 `README.md`、`LICENSE`、`CONTRIBUTORS.md`、`AGENTS.md` 与 `MEMORY.md`。
+
 - 2026-09-12 20:24：用户确认补入1个普通 ME 终端后蓝图完工，提出具体缺料提示和重进未完工任务消失。根因是实际使用的 `blueprint.network.BlueprintTaskManager` 只有静态内存表，未接入已有 `blueprint.storage.BlueprintTaskManager`。现复用既有原子 `.task` 格式，创建立即保存、世界保存/卸载保存，加载独立快照并将施工中任务恢复为待施工；完成/取消持久化终止状态，清空世界时停止会话并清理任务/蓝图库缓存。续建沿用已有世界复核与跳过逻辑，不保存临时物料事务或自动开工。`MaterialTransaction` 失败时通过物品聊天组件显示当前步骤无法取得的数量；ME 模拟不足以数组回传首个真实缺口，事务使用副本避免干扰成功扣料，移除调度器重复泛化提示。保留上一轮身份日志，未放宽材料匹配。`LegacyActionCheck` 覆盖缺料消息、64/66差额为2且不扣料、任务重载位置/主人/权限/部件快照、跨存档隔离与取消不复活。`scripts/forge1710.ps1 smoke` 通过（`logs/tools/2026-09-12 20-23-35.log`），`scripts/lwjgl3ify.ps1 smoke` 通过并同步实例（`logs/tools/2026-09-12 20-24-22.log`）。未启动游戏、未修改用户存档、未提交，保留 `.diagnose-tmp/`；旧版未落盘且已消失的任务无法自动恢复。提示效果与真实重进续建仍待实机确认。
 
 - 2026-09-12 20:12：用户重启诊断版再次复现。`logs/freecam_interaction/2026-09-12 20-11-03.log:84` 与 `:96` 显示任务 `3f68ec9a-7e2b-4e2b-b4f4-91640796ee70` 在 `(722,5,-1495)` 需要普通 ME 终端 `appliedenergistics2:item.ItemMultiPart:380` ×1，所选源 `b8547f69-6f51-4851-8d04-817e08f0fb7f` 的同注册名候选仅 damage56×62、260×62、440×64，没有380；`:86` 与 `:98` 显示 `inventoryDeficit=1, inventoryCandidates=, cursor=null`。因此本次暂停存在真实物料缺口，日志不支持“相同材料存在但匹配失败”；不能以此次结果推断更早背包操作。建议将1个普通 ME 终端放入主背包或当前所选网络，再续建确认；整份蓝图补料后完工尚待用户验收。本轮仅读日志并更新文档，无代码修改，无需重复冒烟。
