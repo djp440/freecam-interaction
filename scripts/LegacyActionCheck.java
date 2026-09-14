@@ -565,6 +565,7 @@ public class LegacyActionCheck {
 
         wandUpgradeChecks();
         blueprintChecks();
+        materialTransactionChecks();
 
         System.out.println("Legacy action checks passed: wire format, truncation, invalid rays, entity-center boundaries, wand selection & attributes, blueprint core models.");
     }
@@ -808,6 +809,54 @@ public class LegacyActionCheck {
         assert local.freecaminteraction.item.ItemFreecamWand.hasBlueprintCore(wandStack) : "Closing container must persist upgrades to wand NBT";
 
         System.out.println("Wand upgrade container checks passed: core attributes, 4-slot layout, locked wand anti-dupe, duplicate prevention, shift-click safety, and NBT persistence.");
+    }
+
+    public static class MessagePlayer extends net.minecraft.entity.player.EntityPlayerMP {
+        net.minecraft.util.IChatComponent lastMessage;
+        MessagePlayer() { super(null, null, null, null); }
+        public void addChatMessage(net.minecraft.util.IChatComponent message) { lastMessage = message; }
+    }
+
+    private static void materialTransactionChecks() throws Exception {
+        java.lang.reflect.Field field = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+        field.setAccessible(true);
+        sun.misc.Unsafe unsafe = (sun.misc.Unsafe) field.get(null);
+        MessagePlayer player = (MessagePlayer) unsafe.allocateInstance(MessagePlayer.class);
+        player.inventory = new net.minecraft.entity.player.InventoryPlayer(player);
+        player.inventoryContainer = new DummyContainer();
+        player.capabilities = new net.minecraft.entity.player.PlayerCapabilities();
+        net.minecraft.item.Item item = new net.minecraft.item.Item().setHasSubtypes(true);
+        registerItemForCheck(item, 4099);
+        net.minecraft.item.ItemStack stack = new net.minecraft.item.ItemStack(item, 64, 380);
+        local.freecaminteraction.blueprint.MaterialRequirement req =
+                new local.freecaminteraction.blueprint.MaterialRequirement(stack, 1);
+        stack.setTagCompound(new net.minecraft.nbt.NBTTagCompound());
+        stack.getTagCompound().setString("displayNote", "preserve");
+        player.inventory.mainInventory[35] = stack;
+        Class<?> transaction = Class.forName("local.freecaminteraction.blueprint.build.MaterialTransaction");
+        java.lang.reflect.Method reserve = transaction.getDeclaredMethod("reserve",
+                net.minecraft.entity.player.EntityPlayerMP.class, java.util.List.class, String.class);
+        reserve.setAccessible(true);
+        Object result = reserve.invoke(null, player, java.util.Collections.singletonList(req), null);
+        assert result != null && stack.stackSize == 63 : "Matching subtype must reserve from inventory without ME";
+        java.lang.reflect.Method rollback = transaction.getDeclaredMethod("rollback");
+        rollback.setAccessible(true);
+        rollback.invoke(result);
+        assert stack.stackSize == 64 && "preserve".equals(stack.getTagCompound().getString("displayNote"))
+                : "Rollback must preserve exact inventory material";
+        stack.setItemDamage(360);
+        assert reserve.invoke(null, player, java.util.Collections.singletonList(req), null) == null
+                && stack.stackSize == 64 : "Different subtype must report shortage without consuming inventory";
+        net.minecraft.util.ChatComponentTranslation message = (net.minecraft.util.ChatComponentTranslation) player.lastMessage;
+        assert "freecam_interaction.blueprint.material_unavailable".equals(message.getKey());
+        assert Integer.valueOf(1).equals(message.getFormatArgs()[1]) : "Shortage message must include missing quantity";
+        assert message.getFormatArgs()[0] instanceof net.minecraft.util.IChatComponent : "Shortage message must include item identity";
+        stack.setItemDamage(380);
+        req.setCount(66);
+        assert reserve.invoke(null, player, java.util.Collections.singletonList(req), null) == null;
+        assert Integer.valueOf(2).equals(((net.minecraft.util.ChatComponentTranslation) player.lastMessage).getFormatArgs()[1]);
+        assert stack.stackSize == 64 : "Failed reservation must not consume partial supply";
+        System.out.println("Material transaction checks passed: subtype, inventory supply, exact rollback, and shortage message.");
     }
 
     private static void blueprintChecks() {
@@ -1303,7 +1352,36 @@ public class LegacyActionCheck {
             assert task.getStatus() == local.freecaminteraction.blueprint.storage.TaskStatus.CANCELLED : "Task status was " + task.getStatus();
             assert !task.isBuildableBy(authorUuid) : "Cancelled task cannot be built";
 
-            System.out.println("Blueprint storage & task manager checks passed: atomic replacement, corrupt isolation, independent snapshot, 3-tier permissions, security enforcement.");
+            local.freecaminteraction.blueprint.network.BlueprintTaskManager.loadWorld(world);
+            assert local.freecaminteraction.blueprint.network.BlueprintTaskManager.getAllTasks().isEmpty();
+            task.setStatus(local.freecaminteraction.blueprint.storage.TaskStatus.IN_PROGRESS);
+            assert local.freecaminteraction.blueprint.storage.BlueprintTaskManager.saveTask(world, task);
+            local.freecaminteraction.blueprint.network.BlueprintTaskManager.loadWorld(world);
+            String liveId = task.getTaskId();
+            local.freecaminteraction.blueprint.network.BlueprintTaskManager.BuildTask live =
+                    local.freecaminteraction.blueprint.network.BlueprintTaskManager.getTask(liveId);
+            assert live != null && live.getStatus() == local.freecaminteraction.blueprint.network.BlueprintTaskManager.STATUS_PENDING;
+            live.setPermission(local.freecaminteraction.blueprint.network.BlueprintTaskManager.PERM_CAN_BUILD);
+            live.setShowOutside(false);
+            live.setStatus(local.freecaminteraction.blueprint.network.BlueprintTaskManager.STATUS_BUILDING);
+            local.freecaminteraction.blueprint.network.BlueprintTaskManager.saveAll();
+            local.freecaminteraction.blueprint.network.BlueprintTaskManager.clearWorld();
+            local.freecaminteraction.blueprint.network.BlueprintTaskManager.loadWorld(world);
+            live = local.freecaminteraction.blueprint.network.BlueprintTaskManager.getTask(liveId);
+            assert live != null && live.getStatus() == local.freecaminteraction.blueprint.network.BlueprintTaskManager.STATUS_PENDING;
+            assert live.getAnchorX() == 100 && live.getAnchorY() == 64 && live.getAnchorZ() == 200;
+            assert authorUuid.equals(live.getOwnerUuid()) && live.getPermission() == 2 && !live.isShowOutside();
+            assert live.getBlueprintSnapshot().getTotalPartCount() == 1 : "Reload must retain independent part snapshot";
+            StorageWorld otherWorld = (StorageWorld) unsafe.allocateInstance(StorageWorld.class);
+            otherWorld.saveHandler = new DummySaveHandler(java.nio.file.Files.createTempDirectory("bp_other_world").toFile());
+            local.freecaminteraction.blueprint.network.BlueprintTaskManager.loadWorld(otherWorld);
+            assert local.freecaminteraction.blueprint.network.BlueprintTaskManager.getAllTasks().isEmpty() : "Tasks must not leak across saves";
+            local.freecaminteraction.blueprint.network.BlueprintTaskManager.loadWorld(world);
+            assert local.freecaminteraction.blueprint.network.BlueprintTaskManager.removeTask(liveId) != null;
+            local.freecaminteraction.blueprint.network.BlueprintTaskManager.loadWorld(world);
+            assert local.freecaminteraction.blueprint.network.BlueprintTaskManager.getAllTasks().isEmpty() : "Removed task must not return after restart";
+            local.freecaminteraction.blueprint.network.BlueprintTaskManager.clearWorld();
+            System.out.println("Blueprint storage & live task checks passed: persistence, paused restore, metadata, world isolation and removal.");
         } catch (Throwable t) {
             throw new RuntimeException("storageChecks failed", t);
         }

@@ -7,7 +7,13 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import local.freecaminteraction.FreecamInteraction;
 import local.freecaminteraction.blueprint.BlueprintData;
+import local.freecaminteraction.ModLog;
+import local.freecaminteraction.blueprint.build.BlueprintBuildScheduler;
+import local.freecaminteraction.blueprint.storage.BlueprintTask;
+import local.freecaminteraction.blueprint.storage.TaskPermission;
+import local.freecaminteraction.blueprint.storage.TaskStatus;
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.world.World;
 
 /**
  * 协作建造任务服务端数据与状态管理。
@@ -107,8 +113,46 @@ public final class BlueprintTaskManager {
     }
 
     private static final ConcurrentHashMap<String, BuildTask> TASKS = new ConcurrentHashMap<String, BuildTask>();
+    private static World saveWorld;
 
     private BlueprintTaskManager() {}
+
+    public static void loadWorld(World world) {
+        clearWorld();
+        saveWorld = world;
+        for (BlueprintTask stored : local.freecaminteraction.blueprint.storage.BlueprintTaskManager.loadAllTasksForWorld(world)) {
+            if (stored.getStatus() == TaskStatus.COMPLETED || stored.getStatus() == TaskStatus.CANCELLED) continue;
+            BlueprintData bp = stored.getSnapshot();
+            BuildTask task = new BuildTask(stored.getTaskId(), bp.getId(), bp.getName(),
+                    stored.getOwnerUuid(), stored.getOwnerName(), stored.getWorldId(),
+                    stored.getOriginX(), stored.getOriginY(), stored.getOriginZ(),
+                    (byte) stored.getPermission().getId(), stored.isShowOutsideFreecam(), STATUS_PENDING,
+                    stored.getCreatedAt(), bp);
+            TASKS.put(task.getTaskId(), task);
+        }
+        ModLog.info("Loaded blueprint build tasks: count=" + TASKS.size());
+    }
+
+    public static void clearWorld() {
+        for (String id : TASKS.keySet()) BlueprintBuildScheduler.INSTANCE.cancelBuild(id);
+        TASKS.clear();
+        local.freecaminteraction.blueprint.storage.BlueprintTaskManager.clearCache();
+        saveWorld = null;
+    }
+
+    public static void saveAll() {
+        for (BuildTask task : TASKS.values()) persist(task,
+                task.getStatus() == STATUS_CANCELLED ? TaskStatus.CANCELLED : TaskStatus.PENDING);
+    }
+
+    private static boolean persist(BuildTask task, TaskStatus status) {
+        if (saveWorld == null) return true;
+        BlueprintTask stored = new BlueprintTask(task.getTaskId(), task.getOwnerUuid(), task.getOwnerName(),
+                task.getDimension(), task.getAnchorX(), task.getAnchorY(), task.getAnchorZ(),
+                task.getBlueprintSnapshot(), TaskPermission.fromId(task.getPermission()), task.isShowOutside(),
+                status, task.getCreatedAt(), System.currentTimeMillis(), -1, 0, Collections.<local.freecaminteraction.blueprint.MaterialRequirement>emptyList());
+        return local.freecaminteraction.blueprint.storage.BlueprintTaskManager.saveTask(saveWorld, stored);
+    }
 
     public static BuildTask createTask(EntityPlayerMP owner, BlueprintData blueprint, int anchorX, int anchorY, int anchorZ) {
         if (owner == null || blueprint == null) return null;
@@ -122,6 +166,7 @@ public final class BlueprintTaskManager {
                 PERM_VISIBLE_NO_BUILD, true, STATUS_PENDING,
                 System.currentTimeMillis(), blueprint
         );
+        if (!persist(task, TaskStatus.PENDING)) return null;
         TASKS.put(taskId, task);
         return task;
     }
@@ -133,6 +178,10 @@ public final class BlueprintTaskManager {
 
     public static BuildTask removeTask(String taskId) {
         if (taskId == null) return null;
+        BuildTask task = TASKS.get(taskId);
+        if (task != null && !persist(task, TaskStatus.CANCELLED)) {
+            return null;
+        }
         return TASKS.remove(taskId);
     }
 

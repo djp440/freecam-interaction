@@ -23,9 +23,18 @@ final class Ae2MaterialReservation {
     private Ae2MaterialReservation(TileAe2Transmitter tile) { this.tile = tile; }
 
     static Ae2MaterialReservation reserve(EntityPlayerMP player, List rawRequirements, int[] deficits, String source) {
-        if (source == null) return allZero(deficits) ? new Ae2MaterialReservation(null) : null;
+        if (source == null) {
+            if (allZero(deficits)) return new Ae2MaterialReservation(null);
+            ModLog.info("AE2 material unavailable: no source selected for build session");
+            return null;
+        }
         TileAe2Transmitter tile = Ae2Runtime.selectedTile(player);
-        if (tile == null || !source.equals(tile.getInstanceId()) || !Ae2Runtime.has(tile, player, SecurityPermissions.EXTRACT)) return null;
+        if (tile == null || !source.equals(tile.getInstanceId()) || !Ae2Runtime.has(tile, player, SecurityPermissions.EXTRACT)) {
+            ModLog.info("AE2 material unavailable: source=" + source + ", selected="
+                    + (tile == null ? "unavailable" : tile.getInstanceId())
+                    + ", extractAllowed=" + (tile != null && Ae2Runtime.has(tile, player, SecurityPermissions.EXTRACT)));
+            return null;
+        }
         Ae2MaterialReservation reservation = new Ae2MaterialReservation(tile);
         try {
             IMEMonitor<IAEItemStack> monitor = tile.getProxy().getStorage().getItemInventory();
@@ -35,9 +44,14 @@ final class Ae2MaterialReservation {
                 int missing = deficits[i];
                 if (missing <= 0) continue;
                 MaterialRequirement requirement = (MaterialRequirement) rawRequirements.get(i);
+                StringBuilder candidates = new StringBuilder();
                 for (IAEItemStack available : monitor.getStorageList()) {
                     if (missing <= 0) break;
                     ItemStack actual = available.getItemStack();
+                    if (actual != null && requirement.getItemRegistryName().equals(MaterialRequirement.resolveItemName(actual.getItem()))) {
+                        candidates.append(" [damage=").append(actual.getItemDamage()).append(", count=").append(available.getStackSize())
+                                .append(", matches=").append(requirement.matches(actual)).append(", nbt=").append(actual.getTagCompound()).append(']');
+                    }
                     if (!requirement.matches(actual)) continue;
                     IAEItemStack request = requested(requests, actual);
                     long reserved = request == null ? 0L : request.getStackSize();
@@ -52,11 +66,21 @@ final class Ae2MaterialReservation {
                         missing -= (int) count;
                     }
                 }
-                if (missing > 0) return null;
+                if (missing > 0) {
+                    ModLog.info("AE2 material unavailable: required=" + requirement.getItemRegistryName() + ":" + requirement.getDamage()
+                            + ", requested=" + deficits[i] + ", unfulfilled=" + missing + ", source=" + source + ", candidates=" + candidates);
+                    // 失败时回传首个实际缺口；成功时保留原数组供背包事务结算。
+                    java.util.Arrays.fill(deficits, 0);
+                    deficits[i] = missing;
+                    return null;
+                }
             }
             for (IAEItemStack request : requests) {
                 IAEItemStack extracted = AEApi.instance().storage().poweredExtraction(tile.getProxy().getEnergy(), monitor, request, actor);
                 if (extracted == null || extracted.getStackSize() != request.getStackSize()) {
+                    ModLog.info("AE2 powered extraction incomplete: item=" + request.getItemStack()
+                            + ", requested=" + request.getStackSize() + ", extracted="
+                            + (extracted == null ? 0L : extracted.getStackSize()) + ", source=" + source);
                     if (extracted != null) reservation.taken.add(extracted);
                     reservation.rollback(player);
                     return null;
@@ -65,7 +89,7 @@ final class Ae2MaterialReservation {
             }
             return reservation;
         } catch (Throwable error) {
-            ModLog.info("AE2 material reservation failed: " + error);
+            ModLog.error("AE2 material reservation failed: source=" + source, error);
             reservation.rollback(player);
             return null;
         }

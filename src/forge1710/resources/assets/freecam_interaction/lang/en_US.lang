@@ -73,5 +73,7 @@ message.freecam_interaction.bp.task_unavailable=Build task not found or already 
 message.freecam_interaction.bp.no_permission=You have no build permission for this task
 message.freecam_interaction.bp.build_out_of_range=Blueprint is out of interaction range, move closer first
 message.freecam_interaction.bp.out_of_materials=Out of materials, build paused
+freecam_interaction.blueprint.material_unavailable=Material unavailable for the current build step: %s x %s. Build paused
+message.freecam_interaction.bp.task_save_failed=Could not save build task. Check logs and disk space
 message.freecam_interaction.bp.wand_exhausted=Wand durability exhausted and no successor wand, build stopped
 message.freecam_interaction.bp.chunk_unloaded=Target chunk not loaded, build paused. Move closer and start again

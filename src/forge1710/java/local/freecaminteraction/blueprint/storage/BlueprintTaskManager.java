@@ -44,6 +44,10 @@ public final class BlueprintTaskManager {
 
     private BlueprintTaskManager() {}
 
+    public static void clearCache() {
+        ACTIVE_TASKS.clear();
+    }
+
     /**
      * 获取任务文件存储目录：freecam_interaction/tasks/
      */

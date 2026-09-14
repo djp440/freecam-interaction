@@ -16,7 +16,21 @@ public final class BlueprintWorldEventListener {
             WorldServer ws = (WorldServer) event.world;
             if (ws.getSaveHandler() != null && ws.getSaveHandler().getWorldDirectory() != null) {
                 BlueprintStorageManager.setSaveDirectory(ws.getSaveHandler().getWorldDirectory());
+                BlueprintTaskManager.loadWorld(ws);
             }
+        }
+    }
+
+    @SubscribeEvent
+    public void onWorldSave(WorldEvent.Save event) {
+        if (!event.world.isRemote && event.world.provider.dimensionId == 0) BlueprintTaskManager.saveAll();
+    }
+
+    @SubscribeEvent
+    public void onWorldUnload(WorldEvent.Unload event) {
+        if (!event.world.isRemote && event.world.provider.dimensionId == 0) {
+            BlueprintTaskManager.saveAll();
+            BlueprintTaskManager.clearWorld();
         }
     }
 }

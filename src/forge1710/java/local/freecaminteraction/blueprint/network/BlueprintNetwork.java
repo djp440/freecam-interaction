@@ -361,7 +361,7 @@ public final class BlueprintNetwork {
                     ModLog.info("Task cancel unauthorized: player=" + player.getCommandSenderName() + "; owner=" + task.getOwnerName());
                     return;
                 }
-                BlueprintTaskManager.removeTask(msg.taskId);
+                if (BlueprintTaskManager.removeTask(msg.taskId) == null) return;
                 task.setStatus(BlueprintTaskManager.STATUS_CANCELLED);
                 broadcastTaskRemove(task, 64.0D);
                 ModLog.info("BuildTask cancelled by owner: id=" + task.getTaskId());

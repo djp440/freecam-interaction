@@ -35,6 +35,7 @@ public final class BlueprintStorageManager {
     private BlueprintStorageManager() {}
 
     public static void setSaveDirectory(File dir) {
+        MEMORY_CACHE.clear();
         worldSaveDir = dir;
     }
 

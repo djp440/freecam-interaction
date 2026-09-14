@@ -2,11 +2,14 @@ package local.freecaminteraction.blueprint.build;
 
 import java.util.ArrayList;
 import java.util.List;
+import local.freecaminteraction.ModLog;
 import local.freecaminteraction.ae2.Ae2Integration;
 import local.freecaminteraction.blueprint.MaterialRequirement;
 import net.minecraft.entity.item.EntityItem;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.item.ItemStack;
+import net.minecraft.util.ChatComponentText;
+import net.minecraft.util.ChatComponentTranslation;
 
 /** 一个施工单元的物料事务：背包优先，ME 补缺，失败退回实际取得的物品。 */
 final class MaterialTransaction {
@@ -50,8 +53,30 @@ final class MaterialTransaction {
         boolean needsMe = false;
         for (int deficit : deficits) if (deficit > 0) { needsMe = true; break; }
         if (needsMe) {
-            tx.meReservation = Ae2Integration.reserveMe(player, requirements, deficits, source);
-            if (tx.meReservation == null) return null;
+            int[] unavailable = deficits.clone();
+            tx.meReservation = Ae2Integration.reserveMe(player, requirements, unavailable, source);
+            if (tx.meReservation == null) {
+                for (int index = 0; index < deficits.length; index++) {
+                    if (deficits[index] <= 0) continue;
+                    MaterialRequirement req = requirements.get(index);
+                    StringBuilder candidates = new StringBuilder();
+                    for (int slot = 0; slot < remainingBySlot.length; slot++) {
+                        ItemStack stack = player.inventory.mainInventory[slot];
+                        if (stack == null || !req.getItemRegistryName().equals(MaterialRequirement.resolveItemName(stack.getItem()))) continue;
+                        candidates.append(" [slot=").append(slot).append(", damage=").append(stack.getItemDamage())
+                                .append(", count=").append(stack.stackSize).append(", matches=").append(req.matches(stack))
+                                .append(", nbt=").append(stack.getTagCompound()).append(']');
+                    }
+                    ModLog.info("Blueprint material unavailable: required=" + req.getItemRegistryName() + ":" + req.getDamage()
+                            + ", count=" + req.getCount() + ", nbt=" + req.getMatchTag()
+                            + ", inventoryDeficit=" + deficits[index] + ", source=" + source
+                            + ", inventoryCandidates=" + candidates + ", cursor=" + player.inventory.getItemStack());
+                }
+                for (int index = 0; index < unavailable.length; index++) {
+                    if (unavailable[index] > 0) notifyMissing(player, requirements.get(index), unavailable[index]);
+                }
+                return null;
+            }
         }
 
         for (int index = 0; index < requirements.size(); index++) {
@@ -71,11 +96,23 @@ final class MaterialTransaction {
             remaining -= deficits[index];
             if (remaining > 0) {
                 tx.rollback();
+                notifyMissing(player, req, remaining);
                 return null;
             }
         }
         player.inventoryContainer.detectAndSendChanges();
         return tx;
+    }
+
+    private static void notifyMissing(EntityPlayerMP player, MaterialRequirement req, int count) {
+        ItemStack sample = req.createSampleStack(1);
+        try {
+            player.addChatMessage(new ChatComponentTranslation("freecam_interaction.blueprint.material_unavailable",
+                    sample == null ? new ChatComponentText(req.getItemRegistryName() + ":" + req.getDamage())
+                            : sample.func_151000_E(), Integer.valueOf(count)));
+        } catch (Throwable error) {
+            ModLog.error("Failed to send blueprint missing material message", error);
+        }
     }
 
     void commit() {

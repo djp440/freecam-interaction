@@ -464,7 +464,12 @@ public final class BlueprintBuildScheduler {
                         + ", conflicts=" + session.conflicts.size() + "]");
                 // 完工任务无追溯价值：直接从任务表移除并通知客户端撤下（与取消同路径），
                 // 否则列表会长期保留已完工任务，再次点击只会得到“任务不存在或已结束”。
-                BlueprintTaskManager.removeTask(session.getTaskId());
+                if (BlueprintTaskManager.removeTask(session.getTaskId()) == null) {
+                    session.setPaused(true);
+                    finished.setStatus(BlueprintTaskManager.STATUS_PENDING);
+                    notifyPlayer(player, "message.freecam_interaction.bp.task_save_failed");
+                    continue;
+                }
                 BlueprintNetwork.broadcastTaskRemove(finished, 64.0D);
                 notifyPlayer(player, "message.freecam_interaction.bp.task_completed");
                 session.setPaused(true);
@@ -588,7 +593,6 @@ public final class BlueprintBuildScheduler {
         if (materials == null) {
             ModLog.info("BuildTask " + session.getTaskId() + " paused: missing materials for block "
                     + entry.getBlockRegistryName() + " at (" + wx + "," + wy + "," + wz + ")");
-            notifyPlayer(player, "message.freecam_interaction.bp.out_of_materials");
             return false;
         }
 
@@ -646,7 +650,6 @@ public final class BlueprintBuildScheduler {
         if (materials == null) {
             ModLog.info("BuildTask " + session.getTaskId() + " paused: missing material for part "
                     + partEntry.getPartId() + " at (" + wx + "," + wy + "," + wz + ")");
-            notifyPlayer(player, "message.freecam_interaction.bp.out_of_materials");
             return false;
         }
 
