@@ -5,7 +5,7 @@ import cpw.mods.fml.common.event.FMLPreInitializationEvent;
 import local.freecaminteraction.blueprint.network.BlueprintNetwork;
 import local.freecaminteraction.blueprint.network.BlueprintWorldEventListener;
 
-@Mod(modid = "freecam_interaction", name = "自由视角交互", version = "0.1.0-forge1710-experiment",
+@Mod(modid = "freecam_interaction", name = "自由视角交互", version = "0.1.0",
         acceptedMinecraftVersions = "[1.7.10]")
 public final class FreecamInteractionMod {
     @Mod.Instance("freecam_interaction")

@@ -61,7 +61,7 @@ try {
         & "$java8/bin/java.exe" -ea '-Dfile.encoding=UTF-8' -cp 'build/classes/java/main;build/checks' LegacyCheck
         if ($LASTEXITCODE -ne 0) { throw 'Java 8 自检失败' }
         Add-Type -AssemblyName System.IO.Compression.FileSystem
-        $jar = Join-Path $ProjectRoot 'build/libs/freecam_interaction-0.1.0-forge1710-experiment.jar'
+        $jar = Join-Path $ProjectRoot 'build/libs/freecam_interaction-0.1.0.jar'
         $zip = [System.IO.Compression.ZipFile]::OpenRead($jar)
         try {
             foreach ($name in @('mcmod.info', 'local/freecaminteraction/FreecamInteractionMod.class', 'local/freecaminteraction/ModLog.class',

@@ -3,7 +3,7 @@ plugins {
     id 'com.gtnewhorizons.retrofuturagradle' version '2.0.4'
 }
 group = 'local.freecaminteraction'
-version = '0.1.0-forge1710-experiment'
+version = '0.1.0'
 base.archivesName = 'freecam_interaction'
 java.toolchain.languageVersion = JavaLanguageVersion.of(8)
 minecraft {
@@ -11,7 +11,7 @@ minecraft {
     username.set('FreecamTester')
     extraRunJvmArguments.add('-Dfile.encoding=UTF-8')
 }
-// 旧版入口独立编译；src/main 保留为迁移参考，不进入产物。
+// Forge 1.7.10 入口独立编译；src/main 保留为跨版本参考，不进入产物。
 sourceSets.main {
     java.setSrcDirs(['src/forge1710/java'])
     resources.setSrcDirs(['src/forge1710/resources'])

@@ -90,7 +90,7 @@ function Prepare-Instance {
     $buildOutput = & "$ProjectRoot/gradlew.bat" build --console=plain 2>&1
     $buildOutput | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) { throw 'Mod 构建失败' }
-    Copy-Item -LiteralPath "$ProjectRoot/build/libs/freecam_interaction-0.1.0-forge1710-experiment.jar" -Destination "$instance/mods/freecam_interaction.jar" -Force
+    Copy-Item -LiteralPath "$ProjectRoot/build/libs/freecam_interaction-0.1.0.jar" -Destination "$instance/mods/freecam_interaction.jar" -Force
     $selected = Join-Path $root 'classpath'
     New-Item -ItemType Directory -Force -Path $selected | Out-Null
     Copy-Item -LiteralPath $forgePatches -Destination "$selected/000-forgePatches.jar" -Force
