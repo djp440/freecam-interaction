@@ -1,6 +1,8 @@
-# 上帝视角建造
+# 自由视角交互
 
-Minecraft **1.21.1** / NeoForge **21.1.249** 上帝视角建造 Mod，不兼容其他 Minecraft 版本。
+Minecraft **1.21.1** / NeoForge **21.1.249** 自由视角观察与建造交互 Mod，不兼容其他 Minecraft 版本。
+
+> 本分支为 1.21.1 次要维护版。项目的主要开发目标是 Forge 1.7.10，请查看 GitHub 默认分支 `main`。
 
 ## 环境与快捷命令
 
@@ -20,7 +22,7 @@ pwsh -File scripts/dev.ps1 client
 - 客户端运行目录为 `run/client`，与现有游戏实例、存档隔离。
 - IDE 以项目根目录导入 Gradle，Gradle JVM 和项目 SDK 选择上述 JDK 21。
 
-## 上帝视角操作
+## 自由视角操作
 
 - 默认 G 进入/退出，也可点击右上角 X 退出；支持在控制设置中修改切换键。
 - WASD 相对视角在水平面平移，按住鼠标中键拖拽旋转，松开停止；不移动或转动玩家。
@@ -56,7 +58,11 @@ pwsh -File scripts/dev.ps1 server
 - `ModLog.LOGGER` 记录 Mod 消息；每次启动一份 `run/client/logs/godview_build/yyyy-MM-dd HH-mm-ss.log`（服务端对应 `run/server`）。Windows 文件名不能包含冒号。
 - 每次工具调用一份 `logs/tools/yyyy-MM-dd HH-mm-ss.log`，游戏及 Gradle 原生日志照常保留。
 - 配置：`gradle.properties`。修改 Mod ID 时同步修改入口常量、包／资源位置和冒烟脚本。
-- 元数据暂用 `All Rights Reserved`，不代选开源许可证；未初始化 Git 或创建提交。
+- 1.21.1 版为保持现有存档和联机协议兼容，仍保留历史技术标识 `godview_build`；对外名称统一为“自由视角交互”。
+
+## 许可证
+
+本项目以 [MIT License](LICENSE) 开源。
 
 ## 来源
 

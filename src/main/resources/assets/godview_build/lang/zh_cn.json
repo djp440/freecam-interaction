@@ -1,8 +1,8 @@
 {
-  "key.categories.godview_build": "上帝视角建造",
-  "key.godview_build.enter": "切换上帝视角",
-  "screen.godview_build.title": "上帝视角",
-  "screen.godview_build.close": "退出上帝视角",
+  "key.categories.godview_build": "自由视角交互",
+  "key.godview_build.enter": "切换自由视角",
+  "screen.godview_build.title": "自由视角",
+  "screen.godview_build.close": "退出自由视角",
   "screen.godview_build.help": "%s/%s/%s/%s 平移 · 空格/Ctrl 升降 · 中键旋转 · 左键挖掘/右键使用 · Shift 辅助交互 · 数字键/滚轮选物 · %s 背包 · Esc 菜单 · %s 或 X 退出",
-  "screen.godview_build.unsupported": "服务器未支持上帝视角交互；当前仅可观察。请在服务器安装相同版本的上帝视角建造。"
+  "screen.godview_build.unsupported": "服务器未支持自由视角交互；当前仅可观察。请在服务器安装相同版本的自由视角交互。"
 }

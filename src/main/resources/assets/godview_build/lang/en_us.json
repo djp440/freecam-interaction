@@ -1,8 +1,8 @@
 {
-  "key.categories.godview_build": "Godview Build",
-  "key.godview_build.enter": "Toggle Godview",
-  "screen.godview_build.title": "GODVIEW",
-  "screen.godview_build.close": "Exit Godview",
+  "key.categories.godview_build": "Freecam Interaction",
+  "key.godview_build.enter": "Toggle Freecam",
+  "screen.godview_build.title": "FREECAM",
+  "screen.godview_build.close": "Exit Freecam",
   "screen.godview_build.help": "%s/%s/%s/%s Pan · Space/Ctrl Elevate · Middle-drag Rotate · Left Mine/Right Use · Shift Secondary use · Number keys/Wheel Select · %s Inventory · Esc Menu · %s or X Exit",
-  "screen.godview_build.unsupported": "This server does not support Godview interaction. Observation only; install the same Godview Build version on the server."
+  "screen.godview_build.unsupported": "This server does not support Freecam Interaction. Observation only; install the same Freecam Interaction version on the server."
 }
